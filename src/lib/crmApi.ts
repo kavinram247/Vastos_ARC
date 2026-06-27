@@ -31,6 +31,8 @@ export const TABLES = {
   pipelineStages: 'crm_pipeline_stages',
   featureFlags: 'crm_feature_flags',
   commChannels: 'crm_comm_channels',
+  roles: 'crm_roles',
+  rolePermissions: 'crm_role_permissions',
 } as const;
 export type StoreKey = keyof typeof TABLES;
 

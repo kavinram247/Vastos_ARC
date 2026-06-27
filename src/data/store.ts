@@ -4,7 +4,8 @@ import type {
   SiteUpdate, PaymentPlan, PaymentSplit, PaymentReceived,
   CostEntry, Comment, Notification, ActivityLog,
   Lead, LeadInteraction, LeadQuotation, ProjectDocument, ProjectVendor,
-  Contact, PipelineStage, FeatureFlag, CommChannel
+  Contact, PipelineStage, FeatureFlag, CommChannel,
+  Role, RolePermission, RoleScope
 } from '../types';
 import { firms as initialFirms } from './mockData';
 import { DEMO_FIRM_ID } from '../lib/supabase';
@@ -44,6 +45,8 @@ class DataStore {
   pipelineStages: PipelineStage[] = [];
   featureFlags: FeatureFlag[] = [];
   commChannels: CommChannel[] = [];
+  roles: Role[] = [];
+  rolePermissions: RolePermission[] = [];
 
   loaded = false;
   private hydrating: Promise<void> | null = null;
@@ -84,6 +87,8 @@ class DataStore {
       this.pipelineStages = (d.pipelineStages as PipelineStage[]).sort((a, b) => a.order_index - b.order_index);
       this.featureFlags = d.featureFlags as FeatureFlag[];
       this.commChannels = d.commChannels as CommChannel[];
+      this.roles = d.roles as Role[];
+      this.rolePermissions = d.rolePermissions as RolePermission[];
       this.loaded = true;
       this.notify();
     });
@@ -113,20 +118,44 @@ class DataStore {
     };
   }
 
-  // Role-based project access
-  getProjectsForUser(userId: string, firmId: string, role: string): Project[] {
+  // ─── RBAC resolvers ───
+  roleForUser(userId: string): Role | undefined {
+    const p = this.profiles.find(x => x.id === userId);
+    if (!p) return undefined;
+    if (p.role_id) return this.roles.find(r => r.id === p.role_id);
+    // legacy fallback (pre-RBAC profiles): map by key
+    return this.roles.find(r => r.key === p.role);
+  }
+
+  /** Data scope for a user, derived from their role (legacy role string as fallback). */
+  scopeForUser(userId: string): RoleScope {
+    const role = this.roleForUser(userId);
+    if (role) return role.scope;
+    const p = this.profiles.find(x => x.id === userId);
+    return p?.role === 'engineer' ? 'assigned' : p?.role === 'client' ? 'own' : 'all';
+  }
+
+  /** Users whose role receives admin-level notifications (replaces role==='owner'). */
+  adminUserIds(firmId: string): string[] {
+    const adminRoleIds = this.roles.filter(r => r.firm_id === firmId && r.is_admin).map(r => r.id);
+    return this.profiles
+      .filter(p => p.firm_id === firmId && p.role_id && adminRoleIds.includes(p.role_id))
+      .map(p => p.id);
+  }
+
+  // Scope-based project access (replaces the old hardcoded-role version).
+  getProjectsForUser(userId: string, firmId: string, _role?: string): Project[] {
     const firmProjects = this.projects.filter(p => p.firm_id === firmId);
-    if (role === 'owner' || role === 'architect') return firmProjects;
-    if (role === 'engineer') {
+    const scope = this.scopeForUser(userId);
+    if (scope === 'all') return firmProjects;
+    if (scope === 'assigned') {
       const assignedProjectIds = this.assignments
         .filter(a => a.user_id === userId)
         .map(a => a.project_id);
       return firmProjects.filter(p => assignedProjectIds.includes(p.id));
     }
-    if (role === 'client') {
-      return firmProjects.filter(p => p.client_id === userId);
-    }
-    return [];
+    // own
+    return firmProjects.filter(p => p.client_id === userId);
   }
 
   // ─── PROFILES ───
@@ -547,6 +576,88 @@ class DataStore {
     this.paymentSplits = this.paymentSplits.filter(s => s.id !== id);
     this.notify();
     crm.persistDelete('paymentSplits', id);
+  }
+
+  // ─── ROLES & PERMISSIONS (RBAC) ───
+  addRole(role: Omit<Role, 'id' | 'created_at' | 'updated_at'>): Role {
+    const now = nowISO();
+    const newRole: Role = { ...role, id: uuid(), created_at: now, updated_at: now };
+    this.roles.push(newRole);
+    this.notify();
+    crm.persistInsert('roles', newRole);
+    return newRole;
+  }
+
+  updateRole(id: string, updates: Partial<Role>) {
+    const idx = this.roles.findIndex(r => r.id === id);
+    if (idx >= 0) {
+      const patch = { ...updates, updated_at: nowISO() };
+      this.roles[idx] = { ...this.roles[idx], ...patch };
+      this.notify();
+      crm.persistUpdate('roles', id, patch);
+    }
+  }
+
+  setRoleEnabled(id: string, enabled: boolean) {
+    this.updateRole(id, { enabled });
+  }
+
+  /** Duplicate a role and all its permission rows under a new id/key/name. */
+  cloneRole(sourceId: string, overrides: Partial<Pick<Role, 'name' | 'key' | 'description'>> = {}): Role | undefined {
+    const src = this.roles.find(r => r.id === sourceId);
+    if (!src) return undefined;
+    const clone = this.addRole({
+      firm_id: src.firm_id,
+      key: overrides.key || `${src.key}-copy-${Math.random().toString(36).slice(2, 6)}`,
+      name: overrides.name || `${src.name} (Copy)`,
+      description: overrides.description ?? src.description,
+      scope: src.scope,
+      is_system: false,   // clones are always editable/deletable
+      is_admin: false,
+      enabled: true,
+      color: src.color,
+    });
+    this.rolePermissions
+      .filter(p => p.role_id === sourceId)
+      .forEach(p => this.setRolePermissions(clone.id, p.module, [...(p.actions || [])], clone.firm_id));
+    return clone;
+  }
+
+  deleteRole(id: string) {
+    const role = this.roles.find(r => r.id === id);
+    if (!role || role.is_system) return; // system roles are protected
+    this.roles = this.roles.filter(r => r.id !== id);
+    this.rolePermissions = this.rolePermissions.filter(p => p.role_id !== id);
+    // Unassign users that pointed at this role
+    this.profiles.forEach(p => { if (p.role_id === id) p.role_id = null; });
+    this.notify();
+    crm.persistDelete('roles', id); // cascades role_permissions in DB
+    crm.persistUpdateWhere('profiles', { role_id: id }, { role_id: null });
+  }
+
+  /** Upsert the granted actions for one (role, module) pair. */
+  setRolePermissions(roleId: string, module: string, actions: string[], firmId?: string) {
+    const idx = this.rolePermissions.findIndex(p => p.role_id === roleId && p.module === module);
+    if (idx >= 0) {
+      this.rolePermissions[idx] = { ...this.rolePermissions[idx], actions };
+      this.notify();
+      crm.persistUpdate('rolePermissions', this.rolePermissions[idx].id, { actions });
+    } else {
+      const fid = firmId || this.roles.find(r => r.id === roleId)?.firm_id || '';
+      const row: RolePermission = { id: uuid(), firm_id: fid, role_id: roleId, module, actions, created_at: nowISO() };
+      this.rolePermissions.push(row);
+      this.notify();
+      crm.persistInsert('rolePermissions', row);
+    }
+  }
+
+  assignUserRole(userId: string, roleId: string) {
+    const idx = this.profiles.findIndex(p => p.id === userId);
+    if (idx >= 0) {
+      this.profiles[idx] = { ...this.profiles[idx], role_id: roleId };
+      this.notify();
+      crm.persistUpdate('profiles', userId, { role_id: roleId });
+    }
   }
 }
 

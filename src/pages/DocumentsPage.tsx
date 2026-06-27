@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { ProjectSubPageHeader } from '../components/ProjectSubPageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -48,6 +49,7 @@ function formatFileSize(kb: number): string {
 export function DocumentsPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -57,7 +59,8 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
 
   const data = store.forFirm(firm.id);
   const selectedProject = projectId;
-  const isClient = user.role === 'client';
+  // "Client view" = own-scope role without document management rights.
+  const isClient = store.scopeForUser(user.id) === 'own' || !can('documents', 'create');
 
   const documents = data.projectDocuments
     .filter(d => d.project_id === selectedProject)

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { ProjectSubPageHeader } from '../components/ProjectSubPageHeader';
 import type { Page } from '../types';
 import { Card, CardTitle } from '../components/ui/Card';
@@ -25,6 +26,7 @@ interface Props {
 export function PaymentsPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [payModalSplitId, setPayModalSplitId] = useState<string | null>(null);
   const [expandedSplit, setExpandedSplit] = useState<string | null>(null);
   const [showInvoice, setShowInvoice] = useState<string | null>(null);
@@ -223,7 +225,7 @@ export function PaymentsPage({ projectId, onNavigate }: Props) {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2">
-                    {(user.role === 'owner') && split.status !== 'paid' && (
+                    {can('payments', 'edit') && split.status !== 'paid' && (
                       <Button size="sm" variant="success" onClick={() => setPayModalSplitId(split.id)}>
                         <IndianRupee className="w-3 h-3" /> Mark Payment Received
                       </Button>
@@ -243,7 +245,7 @@ export function PaymentsPage({ projectId, onNavigate }: Props) {
         <div className="text-center py-12">
           <CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">No payment plan set up for this project.</p>
-          {user.role === 'owner' && (
+          {can('payments', 'create') && (
             <Button className="mt-4" onClick={() => setShowSetupPlan(true)}>
               <Plus className="w-4 h-4" /> Set up payment plan
             </Button>

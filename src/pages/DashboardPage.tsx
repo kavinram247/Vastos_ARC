@@ -1,5 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { formatINR, formatINRCompact, formatDate, getStatusColor, statusLabel } from '../utils/format';
@@ -16,7 +17,9 @@ interface Props {
 export function DashboardPage({ onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { canAccess } = usePermissions();
   if (!user || !firm) return null;
+  const canSeeLeads = canAccess('leads');
 
   const data = store.forFirm(firm.id);
   const myProjects = store.getProjectsForUser(user.id, firm.id, user.role);
@@ -32,7 +35,7 @@ export function DashboardPage({ onNavigate }: Props) {
     (s.status === 'overdue' || s.status === 'due') && myProjects.some(p => p.id === s.project_id)
   );
   const today = new Date().toISOString().split('T')[0];
-  const overdueFollowups = (user.role === 'owner' || user.role === 'architect')
+  const overdueFollowups = canSeeLeads
     ? data.leads.filter(l => l.next_follow_up && l.next_follow_up < today && !['won', 'lost', 'junk'].includes(l.status))
     : [];
 
@@ -63,8 +66,8 @@ export function DashboardPage({ onNavigate }: Props) {
 
   const clientProfile = (id: string) => data.profiles.find(p => p.id === id);
 
-  // Sales pipeline snapshot (owner/architect) — connects the funnel into the command center
-  const showPipeline = user.role === 'owner' || user.role === 'architect';
+  // Sales pipeline snapshot — shown to roles with leads access
+  const showPipeline = canSeeLeads;
   const activeLeads = data.leads.filter(l => !['won', 'lost', 'junk'].includes(l.status));
   const pipelineValue = activeLeads.reduce((s, l) => s + (l.estimated_budget || 0), 0);
   const newLeads = data.leads.filter(l => l.status === 'new');
@@ -304,7 +307,7 @@ export function DashboardPage({ onNavigate }: Props) {
         </Card>
 
         {/* Outstanding by Client */}
-        {(user.role === 'owner' || user.role === 'architect') && (
+        {canAccess('payments') && (
           <Card>
             <CardTitle className="mb-4">Outstanding by Client</CardTitle>
             <div className="space-y-3">

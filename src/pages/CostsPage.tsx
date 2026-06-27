@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { ProjectSubPageHeader } from '../components/ProjectSubPageHeader';
 import type { Page } from '../types';
 import { Card, CardTitle } from '../components/ui/Card';
@@ -30,6 +31,7 @@ const categoryIcons = {
 export function CostsPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [showAddModal, setShowAddModal] = useState(false);
 
   if (!user || !firm) return null;
@@ -56,7 +58,7 @@ export function CostsPage({ projectId, onNavigate }: Props) {
   return (
     <div className="space-y-6">
       <ProjectSubPageHeader projectId={projectId} title="Costs & Profit" subtitle="Track vendor, labour & material expenses" onNavigate={onNavigate}>
-        {(user.role === 'owner' || user.role === 'engineer') && (
+        {can('costs', 'create') && (
           <Button size="sm" onClick={() => setShowAddModal(true)}>
             <Plus className="w-4 h-4" /> Add Cost
           </Button>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -23,6 +24,7 @@ interface Props {
 export function MilestonesPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [delayReason, setDelayReason] = useState('');
@@ -131,7 +133,7 @@ export function MilestonesPage({ projectId, onNavigate }: Props) {
   return (
     <div className="space-y-6">
       <ProjectSubPageHeader projectId={projectId} title="Milestones" subtitle="Track planned vs. actual progress" onNavigate={onNavigate}>
-        {(user.role === 'owner' || user.role === 'architect') && (
+        {can('milestones', 'create') && (
           <Button size="sm" onClick={() => setShowAddModal(true)}>
             <Plus className="w-4 h-4" /> Add
           </Button>
@@ -273,7 +275,7 @@ export function MilestonesPage({ projectId, onNavigate }: Props) {
                 )}
 
                 {/* Status update buttons */}
-                {(user.role === 'owner' || user.role === 'architect' || user.role === 'engineer') && ms.status !== 'completed' && (
+                {can('milestones', 'edit') && ms.status !== 'completed' && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {ms.status === 'not_started' && (
                       <Button size="sm" variant="secondary" onClick={() => handleStatusUpdate(ms.id, 'in_progress')}>

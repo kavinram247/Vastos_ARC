@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { listVendorViewers, setVendorViewer } from '../lib/vendorAccessApi';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -45,6 +46,7 @@ const vendorStatusConfig: Record<string, { label: string; variant: 'success' | '
 export function ProjectDetailPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [showAddVendorModal, setShowAddVendorModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState<string | null>(null);
   const [vendorMenuOpen, setVendorMenuOpen] = useState<string | null>(null);
@@ -108,9 +110,9 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
 
   const activeVendors = vendors.filter(v => v.status === 'active').length;
   const totalVendorValue = vendors.filter(v => v.contract_value).reduce((s, v) => s + v.contract_value!, 0);
-  // Allow-list: owner always; other non-client staff only if explicitly granted.
-  const isOwner = user.role === 'owner';
-  const canViewVendors = isOwner || (user.role !== 'client' && !!vendorViewers?.has(user.id));
+  // Allow-list: vendor-managers always; other non-client staff only if explicitly granted.
+  const isOwner = can('vendors', 'view') || can('projects', 'edit');
+  const canViewVendors = isOwner || (store.scopeForUser(user.id) !== 'own' && !!vendorViewers?.has(user.id));
 
   const handleDeleteVendor = (id: string) => {
     store.deleteProjectVendor(id);
@@ -129,7 +131,7 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
     </div>
   );
 
-  const canEditStatus = user.role === 'owner' || user.role === 'architect';
+  const canEditStatus = can('projects', 'edit');
   const switchProjects = store.getProjectsForUser(user.id, firm.id, user.role);
   const sourceLead = data.leads.find(l => l.converted_project_id === project.id);
 
@@ -365,7 +367,7 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
                   <ShieldCheck className="w-4 h-4" /> Manage access
                 </Button>
               )}
-              {(user.role === 'owner' || user.role === 'architect') && (
+              {can('projects', 'edit') && (
                 <Button size="sm" onClick={() => setShowAddVendorModal(true)}>
                   <Plus className="w-4 h-4" /> Add Vendor
                 </Button>
@@ -449,7 +451,7 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
                               </div>
 
                               {/* Actions */}
-                              {(user.role === 'owner' || user.role === 'architect') && (
+                              {can('projects', 'edit') && (
                                 <div className="relative shrink-0">
                                   <button
                                     onClick={() => setVendorMenuOpen(vendorMenuOpen === vendor.id ? null : vendor.id)}

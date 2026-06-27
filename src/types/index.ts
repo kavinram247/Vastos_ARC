@@ -15,9 +15,38 @@ export interface Profile {
   firm_id: string;
   email: string;
   full_name: string;
-  role: UserRole;
+  role: UserRole;          // legacy — kept for back-compat; RBAC resolves via role_id
+  role_id?: string | null; // FK → Role.id (dynamic RBAC)
   phone?: string;
   avatar_url?: string;
+  created_at: string;
+}
+
+// ─── DYNAMIC RBAC ───
+/** Data scope a role grants over rows (preserves legacy row-level access). */
+export type RoleScope = 'all' | 'assigned' | 'own';
+
+export interface Role {
+  id: string;
+  firm_id: string;
+  key: string;
+  name: string;
+  description?: string | null;
+  scope: RoleScope;
+  is_system: boolean;  // default role — cannot be deleted
+  is_admin: boolean;   // implicit all-access + receives admin notifications
+  enabled: boolean;
+  color?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RolePermission {
+  id: string;
+  firm_id: string;
+  role_id: string;
+  module: string;     // ModuleDef.key
+  actions: string[];  // subset of ACTIONS
   created_at: string;
 }
 
@@ -374,6 +403,7 @@ export type Page =
   | 'user-management'
   | 'leads'
   | 'leads-admin'
+  | 'roles'
   | 'documents'
   | 'tasks'
   | 'attendance'

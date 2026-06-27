@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { ProjectSubPageHeader } from '../components/ProjectSubPageHeader';
 import type { Page } from '../types';
 import { Card } from '../components/ui/Card';
@@ -22,6 +23,7 @@ interface Props {
 export function CommentsPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [newComment, setNewComment] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -89,7 +91,7 @@ export function CommentsPage({ projectId, onNavigate }: Props) {
             <span className="text-xs text-slate-400 ml-auto">{timeAgo(comment.created_at)}</span>
           </div>
           <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{comment.content}</p>
-          {showPin && (user.role === 'owner' || user.role === 'architect') && (
+          {showPin && can('comments', 'delete') && (
             <button
               onClick={() => handlePin(comment.id)}
               className={cn(

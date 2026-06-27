@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -21,6 +22,7 @@ interface Props {
 export function ProjectsPage({ onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [statusMenuOpen, setStatusMenuOpen] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -86,7 +88,7 @@ export function ProjectsPage({ onNavigate }: Props) {
     const completed = milestones.filter(m => m.status === 'completed').length;
     const progress = milestones.length > 0 ? Math.round((completed / milestones.length) * 100) : 0;
 
-    const canEdit = user.role === 'owner' || user.role === 'architect';
+    const canEdit = can('projects', 'edit');
     const isMenuOpen = statusMenuOpen === project.id;
     const statusOptions: { key: typeof project.status; label: string; icon: React.ReactNode; cls: string }[] = [
       { key: 'planning', label: 'Planning', icon: <Settings2 className="w-3.5 h-3.5" />, cls: 'text-slate-600 hover:bg-slate-50' },
@@ -196,7 +198,7 @@ export function ProjectsPage({ onNavigate }: Props) {
           <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
           <p className="text-slate-500 text-sm mt-1">{myProjects.length} project{myProjects.length !== 1 ? 's' : ''}</p>
         </div>
-        {(user.role === 'owner' || user.role === 'architect') && (
+        {can('projects', 'create') && (
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="w-4 h-4" /> New Project
           </Button>

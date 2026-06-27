@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
+import { MODULES, NAV_GROUPS } from '../lib/rbac';
 import { Avatar } from './ui/Avatar';
 import type { Page } from '../types';
-import {
-  LayoutDashboard, FolderKanban,
-  Bell, Activity,
-  LogOut, Menu, X, ChevronDown, Users, Home, TrendingUp, Calculator, Database, Receipt, Truck, Target, ListChecks, CalendarCheck,
-} from 'lucide-react';
+import { Bell, LogOut, Menu, X, ChevronDown } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 interface LayoutProps {
@@ -20,6 +18,7 @@ interface LayoutProps {
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   const { user, firm, logout } = useAuth();
   const store = useStore();
+  const { canAccess } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -27,64 +26,25 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
 
   const unreadNotifs = store.notifications.filter(n => n.user_id === user.id && !n.read).length;
 
-  const isClient = user.role === 'client';
-
   type NavItem = { id: Page; label: string; icon: React.ReactNode; badge?: number };
   type NavGroup = { label: string; items: NavItem[] };
-  
+
   // Project-scoped pages — highlight "Projects" in sidebar when on these
   const projectScopedPages: Page[] = ['milestones', 'site-updates', 'payments', 'costs', 'documents', 'comments', 'project-detail'];
 
-  const navGroups: NavGroup[] = isClient
-    ? [
-        {
-          label: 'Workspace',
-          items: [
-            { id: 'client-portal', label: 'Overview', icon: <Home /> },
-            { id: 'projects', label: 'My Projects', icon: <FolderKanban /> },
-          ],
-        },
-        {
-          label: 'Updates',
-          items: [
-            { id: 'notifications', label: 'Notifications', icon: <Bell />, badge: unreadNotifs },
-          ],
-        },
-      ]
-    : [
-        {
-          label: 'Workspace',
-          items: [
-            { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard /> },
-            { id: 'leads', label: 'Leads', icon: <TrendingUp /> },
-            { id: 'projects', label: 'Projects', icon: <FolderKanban /> },
-            { id: 'tasks', label: 'Tasks', icon: <ListChecks /> },
-            { id: 'attendance', label: 'Attendance', icon: <CalendarCheck /> },
-          ],
-        },
-        {
-          label: 'Commercial',
-          items: [
-            { id: 'boq', label: 'BOQ Estimator', icon: <Calculator /> },
-            { id: 'quotations', label: 'Quotations', icon: <Receipt /> },
-            ...(user.role === 'owner' ? [
-              { id: 'vendors' as Page, label: 'Vendors', icon: <Truck /> },
-              { id: 'catalog' as Page, label: 'Catalog & Rates', icon: <Database /> },
-              { id: 'calibration' as Page, label: 'Accuracy', icon: <Target /> },
-            ] : []),
-          ],
-        },
-        {
-          label: 'Firm',
-          items: [
-            ...(user.role === 'owner' ? [
-              { id: 'user-management' as Page, label: 'Users', icon: <Users /> },
-            ] : []),
-            { id: 'notifications', label: 'Notifications', icon: <Bell />, badge: unreadNotifs },
-            { id: 'activity-log', label: 'Activity Log', icon: <Activity /> },
-          ],
-        },
-      ];
+  // Nav is generated entirely from the RBAC module catalog, filtered by the
+  // current role's view access. No hardcoded role branches.
+  const navGroups: NavGroup[] = NAV_GROUPS.map(group => ({
+    label: group,
+    items: MODULES
+      .filter(m => m.nav && m.group === group && canAccess(m.key))
+      .map<NavItem>(m => ({
+        id: m.page,
+        label: m.label,
+        icon: <m.icon />,
+        badge: m.key === 'notifications' ? unreadNotifs : undefined,
+      })),
+  })).filter(g => g.items.length > 0);
 
   return (
     <div className="min-h-screen bg-slate-50">

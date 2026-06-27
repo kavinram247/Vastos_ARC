@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -33,6 +34,7 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 export function TasksPage() {
   const { user } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,7 @@ export function TasksPage() {
     [store.projects, user?.firm_id],
   );
 
-  const isOwner = user?.role === 'owner';
+  const isOwner = can('tasks', 'assign'); // can grant assign privileges & assign to anyone
   const canAssignOthers = !!isOwner || (!!user && privileges.has(user.id));
 
   const load = () => Promise.all([listTasks(), listAssignPrivileges()])

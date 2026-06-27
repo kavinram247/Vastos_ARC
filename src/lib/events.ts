@@ -47,7 +47,7 @@ export function parseLink(link?: string | null): { page: Page; projectId?: strin
 /** Who should be notified for an event (deduped, actor excluded). */
 function recipients(type: EventType, firmId: string, projectId: string | undefined, actorId: string): string[] {
   const d = store.forFirm(firmId);
-  const owners = d.profiles.filter(p => p.role === 'owner').map(p => p.id);
+  const owners = store.adminUserIds(firmId);
   const project = projectId ? d.projects.find(p => p.id === projectId) : undefined;
   const client = project?.client_id ? [project.client_id] : [];
   const team = projectId ? d.assignments.filter(a => a.project_id === projectId).map(a => a.user_id) : [];
@@ -92,4 +92,32 @@ export function emitEvent(args: EmitArgs) {
       link: args.link,
     });
   }
+}
+
+/** Audit-log a role / permission / user-management change (no notification fan-out). */
+export function logAdminAction(args: {
+  firmId: string;
+  actorId: string;
+  action: string;            // 'created' | 'updated' | 'deleted' | 'assigned' | 'status_changed' | …
+  actionLabel: string;
+  module: 'role' | 'permission' | 'user';
+  entityId?: string;
+  entityName?: string;
+  previousValue?: string;
+  updatedValue?: string;
+  details?: string;
+}) {
+  store.addActivityLog({
+    firm_id: args.firmId,
+    user_id: args.actorId,
+    action: args.action as any,
+    action_label: args.actionLabel,
+    module: args.module as any,
+    entity_type: args.module,
+    entity_id: args.entityId || '',
+    entity_name: args.entityName,
+    previous_value: args.previousValue,
+    updated_value: args.updatedValue,
+    details: args.details,
+  });
 }

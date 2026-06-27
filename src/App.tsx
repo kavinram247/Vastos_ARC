@@ -28,11 +28,16 @@ import { TasksPage } from './pages/TasksPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { CalibrationPage } from './boq/pages/CalibrationPage';
 import { ClientQuotePage } from './boq/pages/ClientQuotePage';
+import { RolesPermissionsPage } from './pages/RolesPermissionsPage';
+import { AccessDenied } from './components/AccessDenied';
+import { usePermissions } from './hooks/usePermissions';
+import { MODULE_BY_KEY, pageToModule } from './lib/rbac';
 
 import type { Page } from './types';
 
 function AppInner() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const { canAccess } = usePermissions();
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
 
@@ -47,8 +52,17 @@ function AppInner() {
     return <LoginPage />;
   }
 
-  // Client role auto-redirects to client portal
-  const effectivePage = user?.role === 'client' && currentPage === 'dashboard' ? 'client-portal' : currentPage;
+  // Users without dashboard access land on the first area they can see
+  // (client portal for clients, otherwise their first permitted nav page).
+  const wantsDashboard = currentPage === 'dashboard';
+  const effectivePage: Page =
+    wantsDashboard && !canAccess('dashboard')
+      ? (canAccess('client-portal') ? 'client-portal' : currentPage)
+      : currentPage;
+
+  // Router guard — block direct/in-app navigation to modules the role can't view.
+  const guardModule = pageToModule(effectivePage);
+  const blocked = effectivePage !== 'login' && !canAccess(guardModule);
 
   const renderPage = () => {
     switch (effectivePage) {
@@ -94,6 +108,8 @@ function AppInner() {
         return <TeamPage />;
       case 'user-management':
         return <UserManagementPage />;
+      case 'roles':
+        return <RolesPermissionsPage />;
       case 'leads':
         return <LeadsPage onNavigate={navigate} />;
       case 'leads-admin':
@@ -123,7 +139,7 @@ function AppInner() {
       onNavigate={navigate}
       selectedProjectId={selectedProjectId}
     >
-      {renderPage()}
+      {blocked ? <AccessDenied module={MODULE_BY_KEY[guardModule]?.label ?? guardModule} /> : renderPage()}
     </Layout>
   );
 }

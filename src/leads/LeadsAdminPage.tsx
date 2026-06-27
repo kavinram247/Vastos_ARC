@@ -1,5 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -25,9 +26,10 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(
 export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, projectId?: string) => void }) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   if (!user || !firm) return null;
-  if (user.role !== 'owner') {
-    return <div className="py-24 text-center text-slate-400">Leads admin is owner-only.</div>;
+  if (!can('leads', 'edit')) {
+    return <div className="py-24 text-center text-slate-400">You don't have permission to configure leads.</div>;
   }
   const firmId = firm.id;
   const flags = store.featureFlags.filter(f => f.firm_id === firmId);

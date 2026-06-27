@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -45,7 +46,8 @@ export function AttendancePage() {
   const [editing, setEditing] = useState<ManualAttendanceInput | null>(null);
   const [showModal, setShowModal] = useState(false);
 
-  const isOwner = user?.role === 'owner';
+  const { can } = usePermissions();
+  const isOwner = can('attendance', 'edit'); // can manage others' attendance
   const employees = useMemo(
     () => store.profiles.filter((p) => p.firm_id === user?.firm_id && p.role !== 'client'),
     [store.profiles, user?.firm_id],

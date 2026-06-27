@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
+import { AccessDenied } from '../components/AccessDenied';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -34,6 +36,7 @@ const roleBadgeVariants: Record<UserRole, 'info' | 'success' | 'warning' | 'defa
 export function UserManagementPage() {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can, canAccess } = usePermissions();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -43,14 +46,10 @@ export function UserManagementPage() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   if (!user || !firm) return null;
-  if (user.role !== 'owner') {
-    return (
-      <div className="text-center py-12">
-        <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-500">Only firm owners can access user management.</p>
-      </div>
-    );
-  }
+  if (!canAccess('users')) return <AccessDenied module="Users" />;
+  const canCreateUser = can('users', 'create');
+  const canEditUser = can('users', 'edit');
+  const canDeleteUser = can('users', 'delete');
 
   const data = store.forFirm(firm.id);
   const allUsers = data.profiles;
@@ -142,7 +141,7 @@ export function UserManagementPage() {
           </div>
 
           {/* Actions Menu */}
-          {!isCurrentUser && (
+          {!isCurrentUser && (canEditUser || canDeleteUser) && (
             <div className="relative">
               <button
                 onClick={() => setActiveMenu(activeMenu === profile.id ? null : profile.id)}
@@ -155,13 +154,15 @@ export function UserManagementPage() {
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setActiveMenu(null)} />
                   <div className="floating-panel absolute right-0 top-full z-20 mt-1 w-48 py-1">
-                    <button
-                      onClick={() => { setEditingUser(profile.id); setActiveMenu(null); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      <Edit2 className="w-4 h-4" /> Edit Details
-                    </button>
-                    {profile.role === 'engineer' && (
+                    {canEditUser && (
+                      <button
+                        onClick={() => { setEditingUser(profile.id); setActiveMenu(null); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        <Edit2 className="w-4 h-4" /> Edit Details
+                      </button>
+                    )}
+                    {canEditUser && profile.role === 'engineer' && (
                       <button
                         onClick={() => { setShowAssignModal(profile.id); setActiveMenu(null); }}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -169,12 +170,14 @@ export function UserManagementPage() {
                         <FolderKanban className="w-4 h-4" /> Manage Assignments
                       </button>
                     )}
-                    <button
-                      onClick={() => { setShowDeleteConfirm(profile.id); setActiveMenu(null); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" /> Remove User
-                    </button>
+                    {canDeleteUser && (
+                      <button
+                        onClick={() => { setShowDeleteConfirm(profile.id); setActiveMenu(null); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" /> Remove User
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -197,9 +200,11 @@ export function UserManagementPage() {
             Manage team members and clients for {firm.name}
           </p>
         </div>
-        <Button onClick={() => setShowInviteModal(true)}>
-          <UserPlus className="w-4 h-4" /> Invite User
-        </Button>
+        {canCreateUser && (
+          <Button onClick={() => setShowInviteModal(true)}>
+            <UserPlus className="w-4 h-4" /> Invite User
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -316,11 +321,13 @@ export function UserManagementPage() {
 // Invite User Modal
 function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: () => void; firmId: string }) {
   const store = useStore();
+  const firmRoles = store.roles.filter(r => r.firm_id === firmId && r.enabled);
+  const defaultRoleId = firmRoles.find(r => r.key === 'engineer')?.id || firmRoles[0]?.id || '';
   const [form, setForm] = useState({
     full_name: '',
     email: '',
     phone: '',
-    role: 'engineer' as UserRole,
+    role_id: defaultRoleId,
     send_invite: true,
   });
   const [sent, setSent] = useState(false);
@@ -329,19 +336,25 @@ function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: ()
     e.preventDefault();
     if (!form.full_name || !form.email) return;
 
+    const role = store.roles.find(r => r.id === form.role_id);
+    // Mirror a legacy UserRole for back-compat displays; role_id is the source of truth.
+    const legacyRole: UserRole = (['owner', 'architect', 'engineer', 'client'] as const).includes(role?.key as UserRole)
+      ? (role!.key as UserRole)
+      : 'engineer';
     // Add the new profile (write-through to Supabase)
     store.addProfile({
       firm_id: firmId,
       email: form.email,
       full_name: form.full_name,
-      role: form.role,
+      role: legacyRole,
+      role_id: form.role_id || null,
       phone: form.phone || undefined,
     });
     setSent(true);
 
     setTimeout(() => {
       setSent(false);
-      setForm({ full_name: '', email: '', phone: '', role: 'engineer', send_invite: true });
+      setForm({ full_name: '', email: '', phone: '', role_id: defaultRoleId, send_invite: true });
       onClose();
     }, 1500);
   };
@@ -383,13 +396,9 @@ function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: ()
           />
           <Select
             label="Role"
-            value={form.role}
-            onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
-            options={[
-              { value: 'architect', label: '🎨 Architect / Designer' },
-              { value: 'engineer', label: '👷 Site Engineer' },
-              { value: 'client', label: '👤 Client' },
-            ]}
+            value={form.role_id}
+            onChange={e => setForm(f => ({ ...f, role_id: e.target.value }))}
+            options={firmRoles.map(r => ({ value: r.id, label: r.name }))}
           />
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -403,12 +412,8 @@ function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: ()
           </label>
 
           <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
-            <p className="font-medium mb-1">Role Permissions:</p>
-            <ul className="space-y-1">
-              <li><b>Architect:</b> Full access to all firm projects</li>
-              <li><b>Engineer:</b> Access only to assigned projects</li>
-              <li><b>Client:</b> View only their own project(s)</li>
-            </ul>
+            <p className="font-medium mb-1">Roles control access</p>
+            <p>Module and action permissions for each role are managed in <b>Roles &amp; Access</b>. You can reassign a user's role there at any time.</p>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">

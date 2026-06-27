@@ -1,12 +1,13 @@
 import { useState, useMemo, useDeferredValue } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
 import { formatINRCompact } from '../utils/format';
 import type { Page, Lead } from '../types';
 import {
-  canViewLeads, getStages, leadKpis, stageByKey, stageColor,
+  getStages, leadKpis, stageByKey, stageColor,
   isOverdue, isDueToday,
 } from './logic';
 import { AddLeadModal } from './AddLeadModal';
@@ -23,6 +24,7 @@ type Tab = 'actions' | 'pipeline' | 'all';
 export function LeadsPage({ onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can, canAccess } = usePermissions();
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [tab, setTab] = useState<Tab>('actions');
@@ -31,7 +33,7 @@ export function LeadsPage({ onNavigate }: Props) {
   const [sort, setSort] = useState<'recent' | 'value' | 'name'>('recent');
 
   if (!user || !firm) return null;
-  if (!canViewLeads(user.role)) {
+  if (!canAccess('leads')) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100"><Lock className="w-6 h-6 text-slate-400" /></div>
@@ -79,10 +81,10 @@ export function LeadsPage({ onNavigate }: Props) {
           <p className="mt-1 text-sm text-slate-500">Capture every inquiry, act on the right ones, and convert deals into live projects.</p>
         </div>
         <div className="flex items-center gap-2">
-          {user.role === 'owner' && (
+          {can('leads', 'edit') && (
             <Button variant="secondary" size="sm" onClick={() => onNavigate?.('leads-admin')}><Settings className="w-4 h-4" /> Admin</Button>
           )}
-          <Button size="sm" onClick={() => setShowAdd(true)}><UserPlus className="w-4 h-4" /> Add lead</Button>
+          {can('leads', 'create') && <Button size="sm" onClick={() => setShowAdd(true)}><UserPlus className="w-4 h-4" /> Add lead</Button>}
         </div>
       </div>
 

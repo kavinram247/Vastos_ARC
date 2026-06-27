@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -29,6 +30,7 @@ const demoPhotos = [
 export function SiteUpdatesPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
+  const { can } = usePermissions();
   const [showAddModal, setShowAddModal] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
 
@@ -48,7 +50,7 @@ export function SiteUpdatesPage({ projectId, onNavigate }: Props) {
   return (
     <div className="space-y-6">
       <ProjectSubPageHeader projectId={projectId} title="Site Updates" subtitle="Photo-first progress updates" onNavigate={onNavigate}>
-        {(user.role === 'engineer' || user.role === 'owner') && (
+        {can('site-updates', 'create') && (
           <Button size="sm" onClick={() => setShowAddModal(true)}>
             <Camera className="w-4 h-4" /> Post Update
           </Button>
