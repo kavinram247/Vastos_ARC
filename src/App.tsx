@@ -29,6 +29,8 @@ import { AttendancePage } from './pages/AttendancePage';
 import { CalibrationPage } from './boq/pages/CalibrationPage';
 import { ClientQuotePage } from './boq/pages/ClientQuotePage';
 import { RolesPermissionsPage } from './pages/RolesPermissionsPage';
+import { MarketingDashboardPage } from './marketing/MarketingDashboardPage';
+import { MarketingConnectPage } from './marketing/MarketingConnectPage';
 import { AccessDenied } from './components/AccessDenied';
 import { usePermissions } from './hooks/usePermissions';
 import { MODULE_BY_KEY, pageToModule } from './lib/rbac';
@@ -110,6 +112,10 @@ function AppInner() {
         return <UserManagementPage />;
       case 'roles':
         return <RolesPermissionsPage />;
+      case 'marketing':
+        return <MarketingDashboardPage onNavigate={navigate} />;
+      case 'marketing-connect':
+        return <MarketingConnectPage onNavigate={navigate} />;
       case 'leads':
         return <LeadsPage onNavigate={navigate} />;
       case 'leads-admin':

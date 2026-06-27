@@ -100,7 +100,7 @@ export function logAdminAction(args: {
   actorId: string;
   action: string;            // 'created' | 'updated' | 'deleted' | 'assigned' | 'status_changed' | …
   actionLabel: string;
-  module: 'role' | 'permission' | 'user';
+  module: 'role' | 'permission' | 'user' | 'marketing';
   entityId?: string;
   entityName?: string;
   previousValue?: string;
