@@ -95,6 +95,9 @@ export interface Lead {
   // Conversion
   converted_project_id?: string;
   lost_reason?: string;
+  lost_reason_category?: LostReasonCategory | null;
+  prev_status?: LeadStatus | null;   // for junk-restore + reversible un-convert
+  contact_id?: string | null;        // canonical contact (returning-customer)
   // Meta
   tags?: string[];
   notes?: string;
@@ -102,6 +105,9 @@ export interface Lead {
   created_at: string;
   updated_at: string;
 }
+
+export type InteractionChannel = 'call' | 'email' | 'sms' | 'whatsapp' | 'meeting' | 'note' | 'meta';
+export type LostReasonCategory = 'price' | 'competition' | 'scope' | 'timing' | 'unresponsive' | 'other';
 
 export interface LeadInteraction {
   id: string;
@@ -115,6 +121,60 @@ export interface LeadInteraction {
   scheduled_at?: string; // for meetings/site visits
   completed_at?: string;
   logged_by: string;
+  created_at: string;
+  // unified 360° timeline
+  channel?: InteractionChannel | null;
+  direction?: 'inbound' | 'outbound' | null;
+  contact_id?: string | null;
+  external_id?: string | null;
+}
+
+// ─── LEADS MODULE: configurable pipeline, contacts, flags, channels ───
+export interface Contact {
+  id: string;
+  firm_id: string;
+  full_name: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  tags?: string[];
+  notes?: string | null;
+  first_seen: string;
+  created_at: string;
+}
+
+export interface PipelineStage {
+  id: string;
+  firm_id: string;
+  key: string;
+  label: string;
+  order_index: number;
+  category: 'active' | 'terminal';
+  is_won: boolean;
+  is_lost: boolean;
+  color?: string | null;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface FeatureFlag {
+  id: string;
+  firm_id: string;
+  key: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface CommChannel {
+  id: string;
+  firm_id: string;
+  provider: string;
+  category: string;
+  display_name?: string | null;
+  status: 'disconnected' | 'connected';
+  config: Record<string, any>;
+  connected_by?: string | null;
+  connected_at?: string | null;
   created_at: string;
 }
 
@@ -313,6 +373,7 @@ export type Page =
   | 'team'
   | 'user-management'
   | 'leads'
+  | 'leads-admin'
   | 'documents'
   | 'tasks'
   | 'attendance'

@@ -17,7 +17,8 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
 import { TeamPage } from './pages/TeamPage';
 import { UserManagementPage } from './pages/UserManagementPage';
-import { LeadsPage } from './pages/LeadsPage';
+import { LeadsPage } from './leads/LeadsPage';
+import { LeadsAdminPage } from './leads/LeadsAdminPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { BoqEstimatorPage } from './boq/pages/BoqEstimatorPage';
 import { CatalogAdminPage } from './boq/pages/CatalogAdminPage';
@@ -95,6 +96,8 @@ function AppInner() {
         return <UserManagementPage />;
       case 'leads':
         return <LeadsPage onNavigate={navigate} />;
+      case 'leads-admin':
+        return <LeadsAdminPage onNavigate={navigate} />;
       case 'tasks':
         return <TasksPage />;
       case 'attendance':

@@ -1009,6 +1009,53 @@ export type Database = {
           },
         ]
       }
+      crm_comm_channels: {
+        Row: {
+          category: string
+          config: Json
+          connected_at: string | null
+          connected_by: string | null
+          created_at: string
+          display_name: string | null
+          firm_id: string
+          id: string
+          provider: string
+          status: string
+        }
+        Insert: {
+          category: string
+          config?: Json
+          connected_at?: string | null
+          connected_by?: string | null
+          created_at?: string
+          display_name?: string | null
+          firm_id: string
+          id?: string
+          provider: string
+          status?: string
+        }
+        Update: {
+          category?: string
+          config?: Json
+          connected_at?: string | null
+          connected_by?: string | null
+          created_at?: string
+          display_name?: string | null
+          firm_id?: string
+          id?: string
+          provider?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_comm_channels_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_comments: {
         Row: {
           author_id: string | null
@@ -1046,6 +1093,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "crm_comments_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_contacts: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string | null
+          firm_id: string
+          first_seen: string
+          full_name: string
+          id: string
+          notes: string | null
+          phone: string | null
+          tags: string[]
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          firm_id: string
+          first_seen?: string
+          full_name: string
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          tags?: string[]
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          firm_id?: string
+          first_seen?: string
+          full_name?: string
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          tags?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_contacts_firm_id_fkey"
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"
@@ -1103,11 +1197,47 @@ export type Database = {
           },
         ]
       }
+      crm_feature_flags: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          firm_id: string
+          id: string
+          key: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          firm_id: string
+          id?: string
+          key: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          firm_id?: string
+          id?: string
+          key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_feature_flags_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_lead_interactions: {
         Row: {
+          channel: string | null
           completed_at: string | null
+          contact_id: string | null
           created_at: string
           description: string | null
+          direction: string | null
+          external_id: string | null
           firm_id: string
           id: string
           lead_id: string
@@ -1119,9 +1249,13 @@ export type Database = {
           type: string
         }
         Insert: {
+          channel?: string | null
           completed_at?: string | null
+          contact_id?: string | null
           created_at?: string
           description?: string | null
+          direction?: string | null
+          external_id?: string | null
           firm_id: string
           id: string
           lead_id: string
@@ -1133,9 +1267,13 @@ export type Database = {
           type: string
         }
         Update: {
+          channel?: string | null
           completed_at?: string | null
+          contact_id?: string | null
           created_at?: string
           description?: string | null
+          direction?: string | null
+          external_id?: string | null
           firm_id?: string
           id?: string
           lead_id?: string
@@ -1244,6 +1382,7 @@ export type Database = {
           client_name: string
           client_phone: string | null
           client_whatsapp: string | null
+          contact_id: string | null
           converted_project_id: string | null
           created_at: string
           created_by: string | null
@@ -1255,8 +1394,10 @@ export type Database = {
           inquiry_date: string | null
           last_contact_date: string | null
           lost_reason: string | null
+          lost_reason_category: string | null
           next_follow_up: string | null
           notes: string | null
+          prev_status: string | null
           priority: string
           project_location: string | null
           project_requirements: string | null
@@ -1273,6 +1414,7 @@ export type Database = {
           client_name: string
           client_phone?: string | null
           client_whatsapp?: string | null
+          contact_id?: string | null
           converted_project_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1284,8 +1426,10 @@ export type Database = {
           inquiry_date?: string | null
           last_contact_date?: string | null
           lost_reason?: string | null
+          lost_reason_category?: string | null
           next_follow_up?: string | null
           notes?: string | null
+          prev_status?: string | null
           priority?: string
           project_location?: string | null
           project_requirements?: string | null
@@ -1302,6 +1446,7 @@ export type Database = {
           client_name?: string
           client_phone?: string | null
           client_whatsapp?: string | null
+          contact_id?: string | null
           converted_project_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1313,8 +1458,10 @@ export type Database = {
           inquiry_date?: string | null
           last_contact_date?: string | null
           lost_reason?: string | null
+          lost_reason_category?: string | null
           next_follow_up?: string | null
           notes?: string | null
+          prev_status?: string | null
           priority?: string
           project_location?: string | null
           project_requirements?: string | null
@@ -1574,6 +1721,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "crm_payments_received_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_pipeline_stages: {
+        Row: {
+          category: string
+          color: string | null
+          created_at: string
+          enabled: boolean
+          firm_id: string
+          id: string
+          is_lost: boolean
+          is_won: boolean
+          key: string
+          label: string
+          order_index: number
+        }
+        Insert: {
+          category?: string
+          color?: string | null
+          created_at?: string
+          enabled?: boolean
+          firm_id: string
+          id?: string
+          is_lost?: boolean
+          is_won?: boolean
+          key: string
+          label: string
+          order_index?: number
+        }
+        Update: {
+          category?: string
+          color?: string | null
+          created_at?: string
+          enabled?: boolean
+          firm_id?: string
+          id?: string
+          is_lost?: boolean
+          is_won?: boolean
+          key?: string
+          label?: string
+          order_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_pipeline_stages_firm_id_fkey"
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"

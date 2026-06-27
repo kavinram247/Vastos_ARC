@@ -27,6 +27,10 @@ export const TABLES = {
   leadQuotations: 'crm_lead_quotations',
   projectDocuments: 'crm_project_documents',
   projectVendors: 'crm_project_vendors',
+  contacts: 'crm_contacts',
+  pipelineStages: 'crm_pipeline_stages',
+  featureFlags: 'crm_feature_flags',
+  commChannels: 'crm_comm_channels',
 } as const;
 export type StoreKey = keyof typeof TABLES;
 

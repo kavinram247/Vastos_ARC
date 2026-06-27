@@ -3,7 +3,8 @@ import type {
   Firm, Profile, Project, ProjectAssignment, Milestone,
   SiteUpdate, PaymentPlan, PaymentSplit, PaymentReceived,
   CostEntry, Comment, Notification, ActivityLog,
-  Lead, LeadInteraction, LeadQuotation, ProjectDocument, ProjectVendor
+  Lead, LeadInteraction, LeadQuotation, ProjectDocument, ProjectVendor,
+  Contact, PipelineStage, FeatureFlag, CommChannel
 } from '../types';
 import { firms as initialFirms } from './mockData';
 import { DEMO_FIRM_ID } from '../lib/supabase';
@@ -39,6 +40,10 @@ class DataStore {
   leadQuotations: LeadQuotation[] = [];
   projectDocuments: ProjectDocument[] = [];
   projectVendors: ProjectVendor[] = [];
+  contacts: Contact[] = [];
+  pipelineStages: PipelineStage[] = [];
+  featureFlags: FeatureFlag[] = [];
+  commChannels: CommChannel[] = [];
 
   loaded = false;
   private hydrating: Promise<void> | null = null;
@@ -75,6 +80,10 @@ class DataStore {
       this.leadQuotations = d.leadQuotations as LeadQuotation[];
       this.projectDocuments = d.projectDocuments as ProjectDocument[];
       this.projectVendors = d.projectVendors as ProjectVendor[];
+      this.contacts = d.contacts as Contact[];
+      this.pipelineStages = (d.pipelineStages as PipelineStage[]).sort((a, b) => a.order_index - b.order_index);
+      this.featureFlags = d.featureFlags as FeatureFlag[];
+      this.commChannels = d.commChannels as CommChannel[];
       this.loaded = true;
       this.notify();
     });
@@ -171,6 +180,12 @@ class DataStore {
     this.assignments = this.assignments.filter(a => !(a.user_id === userId && a.firm_id === firmId));
     this.notify();
     crm.persistDeleteWhere('assignments', { firm_id: firmId, user_id: userId });
+  }
+
+  removeProjectAssignments(firmId: string, projectId: string) {
+    this.assignments = this.assignments.filter(a => !(a.project_id === projectId && a.firm_id === firmId));
+    this.notify();
+    crm.persistDeleteWhere('assignments', { firm_id: firmId, project_id: projectId });
   }
 
   // ─── MILESTONES ───
@@ -430,6 +445,108 @@ class DataStore {
     this.projectVendors = this.projectVendors.filter(v => v.id !== id);
     this.notify();
     crm.persistDelete('projectVendors', id);
+  }
+
+  // ─── CONTACTS (returning-customer recognition) ───
+  addContact(contact: Omit<Contact, 'id' | 'created_at' | 'first_seen'> & { first_seen?: string }) {
+    const now = nowISO();
+    const newC: Contact = { ...contact, id: uuid(), first_seen: contact.first_seen || now, created_at: now } as Contact;
+    this.contacts.push(newC);
+    this.notify();
+    crm.persistInsert('contacts', newC);
+    return newC;
+  }
+  updateContact(id: string, updates: Partial<Contact>) {
+    const idx = this.contacts.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      this.contacts[idx] = { ...this.contacts[idx], ...updates };
+      this.notify();
+      crm.persistUpdate('contacts', id, updates);
+    }
+  }
+  /** Find an existing contact by email or phone (returning-customer match). */
+  findContact(firmId: string, email?: string | null, phone?: string | null): Contact | undefined {
+    const e = (email || '').trim().toLowerCase();
+    const p = (phone || '').replace(/\s+/g, '');
+    return this.contacts.find(c => c.firm_id === firmId && (
+      (!!e && (c.email || '').trim().toLowerCase() === e) ||
+      (!!p && (c.phone || '').replace(/\s+/g, '') === p)
+    ));
+  }
+
+  // ─── PIPELINE STAGES (admin-editable) ───
+  addPipelineStage(stage: Omit<PipelineStage, 'id' | 'created_at'>) {
+    const newS: PipelineStage = { ...stage, id: uuid(), created_at: nowISO() };
+    this.pipelineStages.push(newS);
+    this.pipelineStages.sort((a, b) => a.order_index - b.order_index);
+    this.notify();
+    crm.persistInsert('pipelineStages', newS);
+    return newS;
+  }
+  updatePipelineStage(id: string, updates: Partial<PipelineStage>) {
+    const idx = this.pipelineStages.findIndex(s => s.id === id);
+    if (idx >= 0) {
+      this.pipelineStages[idx] = { ...this.pipelineStages[idx], ...updates };
+      this.pipelineStages.sort((a, b) => a.order_index - b.order_index);
+      this.notify();
+      crm.persistUpdate('pipelineStages', id, updates);
+    }
+  }
+  deletePipelineStage(id: string) {
+    this.pipelineStages = this.pipelineStages.filter(s => s.id !== id);
+    this.notify();
+    crm.persistDelete('pipelineStages', id);
+  }
+
+  // ─── FEATURE FLAGS ───
+  setFeatureFlag(firmId: string, key: string, enabled: boolean) {
+    const idx = this.featureFlags.findIndex(f => f.firm_id === firmId && f.key === key);
+    if (idx >= 0) {
+      this.featureFlags[idx] = { ...this.featureFlags[idx], enabled };
+      this.notify();
+      crm.persistUpdate('featureFlags', this.featureFlags[idx].id, { enabled });
+    } else {
+      const newF: FeatureFlag = { id: uuid(), firm_id: firmId, key, enabled, created_at: nowISO() };
+      this.featureFlags.push(newF);
+      this.notify();
+      crm.persistInsert('featureFlags', newF);
+    }
+  }
+  isFeatureEnabled(firmId: string, key: string, dflt = true): boolean {
+    const f = this.featureFlags.find(x => x.firm_id === firmId && x.key === key);
+    return f ? f.enabled : dflt;
+  }
+
+  // ─── COMM CHANNELS ───
+  updateCommChannel(id: string, updates: Partial<CommChannel>) {
+    const idx = this.commChannels.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      this.commChannels[idx] = { ...this.commChannels[idx], ...updates };
+      this.notify();
+      crm.persistUpdate('commChannels', id, updates);
+    }
+  }
+
+  // ─── DELETE PRIMITIVES (reversible un-convert) ───
+  deleteProject(id: string) {
+    this.projects = this.projects.filter(p => p.id !== id);
+    this.notify();
+    crm.persistDelete('projects', id);
+  }
+  deleteMilestone(id: string) {
+    this.milestones = this.milestones.filter(m => m.id !== id);
+    this.notify();
+    crm.persistDelete('milestones', id);
+  }
+  deletePaymentPlan(id: string) {
+    this.paymentPlans = this.paymentPlans.filter(p => p.id !== id);
+    this.notify();
+    crm.persistDelete('paymentPlans', id);
+  }
+  deletePaymentSplit(id: string) {
+    this.paymentSplits = this.paymentSplits.filter(s => s.id !== id);
+    this.notify();
+    crm.persistDelete('paymentSplits', id);
   }
 }
 
