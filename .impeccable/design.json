@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-24T00:00:00+05:30",
+  "title": "Design System: Vastos Arch",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Studio Spruce",
+        "canonical": "oklch(48% 0.09 164)",
+        "tonalRamp": ["#08231C", "#0F3A30", "#145247", "#1B6A59", "#3A8474", "#6FA99C", "#AFD0C7", "#E4F1EC"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Working Canvas",
+        "canonical": "oklch(97.5% 0.006 150)",
+        "tonalRamp": ["#17201D", "#2C3732", "#46534D", "#64716B", "#9AA59F", "#C7CEC9", "#E5E9E6", "#F5F7F5"]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Night Studio",
+        "canonical": "oklch(22% 0.02 160)",
+        "tonalRamp": ["#0A100E", "#101815", "#15201C", "#27332E", "#4B5A53", "#7E8C85", "#B8C1BC", "#EEF1EF"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Page headline", "purpose": "Authoritative page identity without marketing scale." },
+      "title": { "displayName": "Section title", "purpose": "Clear local hierarchy across panels and tables." },
+      "body": { "displayName": "Interface body", "purpose": "Dense but comfortable operational reading." },
+      "label": { "displayName": "Annotation label", "purpose": "Metadata, field labels, and compact navigation." }
+    },
+    "shadows": [
+      { "name": "surface", "value": "0 1px 2px rgba(16, 32, 26, 0.06)", "purpose": "Quiet separation for primary working surfaces." },
+      { "name": "floating", "value": "0 12px 28px rgba(10, 24, 18, 0.14)", "purpose": "Menus and modal surfaces." },
+      { "name": "focus", "value": "0 0 0 3px rgba(27, 106, 89, 0.16)", "purpose": "Visible keyboard and input focus." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "150ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Hover, focus, and press feedback." },
+      { "name": "surface", "value": "220ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Menus, drawers, and modal transitions." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single high-emphasis action in a local region.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary{height:40px;padding:0 16px;border:0;border-radius:9px;background:#1B6A59;color:#fff;font:600 14px/1 'Avenir Next','Segoe UI',sans-serif;box-shadow:0 1px 2px rgba(12,48,39,.16);transition:background-color 150ms cubic-bezier(.22,1,.36,1),transform 150ms cubic-bezier(.22,1,.36,1)}.ds-btn-primary:hover{background:#124B40}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(27,106,89,.2)}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A quiet supporting action with a crisp boundary.",
+      "html": "<button class=\"ds-btn-secondary\">Export</button>",
+      "css": ".ds-btn-secondary{height:40px;padding:0 16px;border:1px solid #DDE4DF;border-radius:9px;background:#fff;color:#34413C;font:600 14px/1 'Avenir Next','Segoe UI',sans-serif;transition:background-color 150ms cubic-bezier(.22,1,.36,1),border-color 150ms cubic-bezier(.22,1,.36,1)}.ds-btn-secondary:hover{border-color:#C5CEC8;background:#F5F7F5}.ds-btn-secondary:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(27,106,89,.16)}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A comfortable 40px field with a visible, restrained focus state.",
+      "html": "<label class=\"ds-field\"><span>Project name</span><input placeholder=\"Enter a name\" /></label>",
+      "css": ".ds-field{display:grid;gap:6px;color:#34413C;font:600 12px/1.35 'Avenir Next','Segoe UI',sans-serif}.ds-field input{height:40px;padding:0 12px;border:1px solid #DDE4DF;border-radius:9px;background:#fff;color:#17201D;font:450 14px/1.4 'Avenir Next','Segoe UI',sans-serif}.ds-field input::placeholder{color:#7D8983}.ds-field input:hover{border-color:#C5CEC8}.ds-field input:focus{outline:0;border-color:#1B6A59;box-shadow:0 0 0 3px rgba(27,106,89,.12)}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "description": "A compact dark-rail navigation row with a tonal selected state.",
+      "html": "<button class=\"ds-nav-item ds-nav-item-active\"><span class=\"ds-nav-mark\"></span>Projects</button>",
+      "css": ".ds-nav-item{display:flex;align-items:center;gap:12px;width:220px;height:36px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:rgba(255,255,255,.56);font:500 13px/1 'Avenir Next','Segoe UI',sans-serif;text-align:left}.ds-nav-item:hover{background:rgba(255,255,255,.055);color:rgba(255,255,255,.88)}.ds-nav-item-active{background:rgba(255,255,255,.1);color:#fff}.ds-nav-mark{width:8px;height:8px;border-radius:2px;background:#82C2AD}.ds-nav-item:focus-visible{outline:2px solid #82C2AD;outline-offset:2px}"
+    },
+    {
+      "name": "Surface Panel",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The default working surface: quiet, borderless, and structurally elevated.",
+      "html": "<section class=\"ds-surface\"><h3>Active project status</h3><p>Operational content lives here.</p></section>",
+      "css": ".ds-surface{padding:20px;border-radius:12px;background:#fff;color:#17201D;box-shadow:0 1px 2px rgba(16,32,26,.06),0 1px 1px rgba(16,32,26,.03);font-family:'Avenir Next','Segoe UI',sans-serif}.ds-surface h3{margin:0;color:#17201D;font-size:16px;line-height:1.35;letter-spacing:-.012em}.ds-surface p{margin:8px 0 0;color:#64716B;font-size:14px;line-height:1.55}"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "description": "A compact semantic label with a squared, non-pill silhouette.",
+      "html": "<span class=\"ds-badge\">In progress</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;min-height:20px;padding:4px 8px;border-radius:6px;background:#E4F1EC;color:#175548;font:600 11px/1 'Avenir Next','Segoe UI',sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Studio Ledger",
+    "overview": "A beautifully maintained operating ledger for a respected architecture studio: exact, calm, practical, and considered. Refinement comes from disciplined spacing, typography, and information density rather than ornamental UI.",
+    "keyCharacteristics": [
+      "Restrained spruce accent on neutral working surfaces",
+      "Strong typographic hierarchy and tabular numerals",
+      "Flat-by-default containers with structural elevation",
+      "Comfortable 8px-grid spacing with compact data regions",
+      "Fast, quiet interaction feedback"
+    ],
+    "rules": [
+      { "name": "The One-Marker Rule", "body": "Studio Spruce is reserved for action, selection, and focus.", "section": "colors" },
+      { "name": "The State-Is-Meaning Rule", "body": "Semantic colors communicate real status only.", "section": "colors" },
+      { "name": "The Quiet Headline Rule", "body": "Page titles establish authority without becoming hero typography.", "section": "typography" },
+      { "name": "The Flat-by-Default Rule", "body": "A surface must earn elevation by floating, moving, or requiring temporary focus.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use the 8px grid and optical adjustments where needed.",
+      "Do use whitespace, dividers, and type before adding a container.",
+      "Do make tables scannable and numeric columns tabular.",
+      "Do provide complete interaction and feedback states."
+    ],
+    "donts": [
+      "Don't use generic bordered card grids or nested containers.",
+      "Don't use purple-blue startup gradients or decorative glassmorphism.",
+      "Don't use excessive pills, oversized radii, or ghost cards.",
+      "Don't trade familiar product affordances for novelty."
+    ]
+  }
+}

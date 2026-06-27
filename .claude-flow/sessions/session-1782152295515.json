@@ -1,0 +1,14 @@
+{
+  "id": "session-1782152295515",
+  "startedAt": "2026-06-22T18:18:15.515Z",
+  "cwd": "/Users/kavin/Downloads/vastoArchV1",
+  "context": {},
+  "metrics": {
+    "edits": 0,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-06-22T18:18:15.954Z",
+  "duration": 440
+}

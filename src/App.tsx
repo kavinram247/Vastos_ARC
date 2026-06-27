@@ -1,0 +1,151 @@
+import { useState, useCallback, useEffect } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { useStore } from './hooks/useStore';
+import { Loader2 } from 'lucide-react';
+import { Layout } from './components/Layout';
+import { LoginPage } from './pages/LoginPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ProjectsPage } from './pages/ProjectsPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { MilestonesPage } from './pages/MilestonesPage';
+import { SiteUpdatesPage } from './pages/SiteUpdatesPage';
+import { PaymentsPage } from './pages/PaymentsPage';
+import { CostsPage } from './pages/CostsPage';
+import { CommentsPage } from './pages/CommentsPage';
+import { ClientPortalPage } from './pages/ClientPortalPage';
+import { NotificationsPage } from './pages/NotificationsPage';
+import { ActivityLogPage } from './pages/ActivityLogPage';
+import { TeamPage } from './pages/TeamPage';
+import { UserManagementPage } from './pages/UserManagementPage';
+import { LeadsPage } from './pages/LeadsPage';
+import { DocumentsPage } from './pages/DocumentsPage';
+import { BoqEstimatorPage } from './boq/pages/BoqEstimatorPage';
+import { CatalogAdminPage } from './boq/pages/CatalogAdminPage';
+import { QuotationsPage } from './boq/pages/QuotationsPage';
+import { VendorsPage } from './boq/pages/VendorsPage';
+import { TasksPage } from './pages/TasksPage';
+import { AttendancePage } from './pages/AttendancePage';
+import { CalibrationPage } from './boq/pages/CalibrationPage';
+import { ClientQuotePage } from './boq/pages/ClientQuotePage';
+
+import type { Page } from './types';
+
+function AppInner() {
+  const { isAuthenticated, user } = useAuth();
+  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
+
+  const navigate = useCallback((page: Page, projectId?: string) => {
+    setCurrentPage(page);
+    if (projectId !== undefined) {
+      setSelectedProjectId(projectId);
+    }
+  }, []);
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  // Client role auto-redirects to client portal
+  const effectivePage = user?.role === 'client' && currentPage === 'dashboard' ? 'client-portal' : currentPage;
+
+  const renderPage = () => {
+    switch (effectivePage) {
+      case 'dashboard':
+        return <DashboardPage onNavigate={navigate} />;
+      case 'projects':
+        return <ProjectsPage onNavigate={navigate} />;
+      case 'project-detail':
+        return selectedProjectId
+          ? <ProjectDetailPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'milestones':
+        return selectedProjectId
+          ? <MilestonesPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'site-updates':
+        return selectedProjectId
+          ? <SiteUpdatesPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'payments':
+        return selectedProjectId
+          ? <PaymentsPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'costs':
+        return selectedProjectId
+          ? <CostsPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'comments':
+        return selectedProjectId
+          ? <CommentsPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'documents':
+        return selectedProjectId
+          ? <DocumentsPage projectId={selectedProjectId} onNavigate={navigate} />
+          : <ProjectsPage onNavigate={navigate} />;
+      case 'client-portal':
+        return <ClientPortalPage onNavigate={navigate} />;
+      case 'notifications':
+        return <NotificationsPage onNavigate={navigate} />;
+      case 'activity-log':
+        return <ActivityLogPage />;
+      case 'team':
+        return <TeamPage />;
+      case 'user-management':
+        return <UserManagementPage />;
+      case 'leads':
+        return <LeadsPage onNavigate={navigate} />;
+      case 'tasks':
+        return <TasksPage />;
+      case 'attendance':
+        return <AttendancePage />;
+      case 'boq':
+        return <BoqEstimatorPage />;
+      case 'catalog':
+        return <CatalogAdminPage />;
+      case 'quotations':
+        return <QuotationsPage />;
+      case 'vendors':
+        return <VendorsPage />;
+      case 'calibration':
+        return <CalibrationPage />;
+      default:
+        return <DashboardPage onNavigate={navigate} />;
+    }
+  };
+
+  return (
+    <Layout
+      currentPage={effectivePage}
+      onNavigate={navigate}
+      selectedProjectId={selectedProjectId}
+    >
+      {renderPage()}
+    </Layout>
+  );
+}
+
+function HydrationGate() {
+  const store = useStore();
+  useEffect(() => { store.hydrate().catch((e) => console.error('hydrate failed', e)); }, []);
+  if (!store.loaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-400">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading workspace…
+      </div>
+    );
+  }
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
+  );
+}
+
+export default function App() {
+  // Public client-quote route — no auth, no app shell.
+  const quoteToken = new URLSearchParams(window.location.search).get('quote');
+  if (quoteToken) return <ClientQuotePage token={quoteToken} />;
+
+  return <HydrationGate />;
+}
