@@ -5,7 +5,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import {
   fetchMaterialRows, saveMaterialRate, saveProductWaste,
-  fetchLabourRows, saveLabourRate, fetchMargin, saveMargin,
+  fetchLabourRows, saveLabourRate, ensureMargin, saveMargin,
   fetchRegionAdmin, saveRegion,
   type MaterialRow, type LabourRow, type MarginRow, type RegionAdminRow,
 } from '../adminApi';
@@ -183,10 +183,19 @@ function LabourTab() {
 
 function MarginsTab() {
   const [m, setM] = useState<MarginRow | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
-  useEffect(() => { fetchMargin().then(setM).catch(console.error); }, []);
-  if (!m) return <Loading />;
+  const reload = () => { setLoading(true); ensureMargin().then(setM).catch(console.error).finally(() => setLoading(false)); };
+  useEffect(() => { reload(); }, []);
+  if (loading) return <Loading />;
+  if (!m) return (
+    <Card className="max-w-lg space-y-3">
+      <CardTitle>Default margin policy</CardTitle>
+      <p className="text-sm text-slate-500">Couldn't load or create the margin policy. Check the Supabase connection and retry.</p>
+      <Button variant="secondary" onClick={reload}>Retry</Button>
+    </Card>
+  );
   const save = async () => {
     setSaving(true);
     try { await saveMargin(m.id, { target_margin_pct: m.target_margin_pct, margin_floor_pct: m.margin_floor_pct, overhead_pct: m.overhead_pct }); setDone(true); setTimeout(() => setDone(false), 1500); }

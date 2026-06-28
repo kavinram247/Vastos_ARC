@@ -88,6 +88,21 @@ export async function saveMargin(id: string, m: { target_margin_pct: number; mar
   const { error } = await supabase.from('margin_policies').update(m as any).eq('id', id);
   if (error) throw error;
 }
+/** Fetch the firm-wide default margin policy, creating a sensible default if none exists (self-heals after a data reset). */
+export async function ensureMargin(firmId = DEMO_FIRM_ID): Promise<MarginRow | null> {
+  const existing = await fetchMargin(firmId);
+  if (existing) return existing;
+  const row: any = {
+    id: (globalThis.crypto as any)?.randomUUID?.() ?? undefined,
+    firm_id: firmId, category_id: null, grade: null,
+    target_margin_pct: 35, margin_floor_pct: 18, overhead_pct: 8,
+  };
+  const { data, error } = await supabase.from('margin_policies').insert(row)
+    .select('id,target_margin_pct,margin_floor_pct,overhead_pct').single();
+  if (error) { console.error('ensureMargin: could not create default policy', error.message); return null; }
+  const m = data as any;
+  return { id: m.id, target_margin_pct: Number(m.target_margin_pct), margin_floor_pct: Number(m.margin_floor_pct), overhead_pct: Number(m.overhead_pct) };
+}
 
 export interface RegionAdminRow { id: string; name: string; material_index: number; labour_index: number; logistics_index: number; availability_risk: number }
 export async function fetchRegionAdmin(firmId = DEMO_FIRM_ID): Promise<RegionAdminRow[]> {
