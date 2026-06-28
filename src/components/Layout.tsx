@@ -18,7 +18,7 @@ interface LayoutProps {
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   const { user, firm, logout } = useAuth();
   const store = useStore();
-  const { canAccess } = usePermissions();
+  const { can, canAccess } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -37,7 +37,11 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   const navGroups: NavGroup[] = NAV_GROUPS.map(group => ({
     label: group,
     items: MODULES
-      .filter(m => m.nav && m.group === group && canAccess(m.key))
+      .filter(m => {
+        if (!m.nav || m.group !== group) return false;
+        if (m.key === 'leads-admin') return can('leads', 'edit');
+        return canAccess(m.key);
+      })
       .map<NavItem>(m => ({
         id: m.page,
         label: m.label,
