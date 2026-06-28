@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { Card, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Modal } from '../components/ui/Modal';
+import { Input, Select } from '../components/ui/Input';
 import { stageColor } from './logic';
+import { TELEPHONY_PROVIDERS, type TelephonyConfig } from './telephony';
 import type { Page } from '../types';
 import {
   ArrowLeft, Settings, ToggleLeft, GitBranch, Radio, Globe, Plus, Trash2,
-  ChevronUp, ChevronDown, Check, Link2, Copy,
+  ChevronUp, ChevronDown, Check, Link2, Copy, Phone, Sliders,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -27,6 +31,7 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
   const { user, firm } = useAuth();
   const store = useStore();
   const { can } = usePermissions();
+  const [configId, setConfigId] = useState<string | null>(null);
   if (!user || !firm) return null;
   if (!can('leads', 'edit')) {
     return <div className="py-24 text-center text-slate-400">You don't have permission to configure leads.</div>;
@@ -129,13 +134,19 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
         <div className="grid gap-2 sm:grid-cols-2">
           {channels.map(ch => {
             const connected = ch.status === 'connected';
+            const isTelephony = ch.category === 'telephony';
             return (
               <div key={ch.id} className="flex items-center justify-between rounded-xl border border-slate-100 p-3">
-                <div>
-                  <div className="text-sm font-medium text-slate-800">{ch.display_name || ch.provider}</div>
-                  <div className="text-xs capitalize text-slate-400">{ch.category}</div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800">{isTelephony && <Phone className="w-3.5 h-3.5 text-indigo-500" />}{ch.display_name || ch.provider}</div>
+                  <div className="text-xs capitalize text-slate-400">{ch.category}{isTelephony && connected ? ` · ${(ch.config as any)?.provider || 'configured'}` : ''}</div>
                 </div>
-                {connected ? (
+                {isTelephony ? (
+                  <div className="flex items-center gap-2">
+                    {connected && <Badge variant="success" size="sm"><Check className="w-3 h-3 mr-1" /> Active</Badge>}
+                    <Button size="sm" variant="secondary" onClick={() => setConfigId(ch.id)}><Sliders className="w-3.5 h-3.5" /> {connected ? 'Edit' : 'Set up'}</Button>
+                  </div>
+                ) : connected ? (
                   <div className="flex items-center gap-2">
                     <Badge variant="success" size="sm"><Check className="w-3 h-3 mr-1" /> Connected</Badge>
                     <button onClick={() => toggleChannel(ch.id, true)} className="text-xs text-slate-400 hover:text-red-600">Disconnect</button>
@@ -147,6 +158,7 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
             );
           })}
         </div>
+        <p className="mt-2 text-[11px] text-slate-400">Telephony powers the <b>Call</b> button on every lead — pick your partner and the agent number, or use the device dialer.</p>
       </Card>
 
       {/* Website capture */}
@@ -159,6 +171,71 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
         </div>
         <p className="mt-2 text-[11px] text-slate-400">New website leads default to the first pipeline stage and stay unassigned until an owner picks them up.</p>
       </Card>
+
+      {configId && <TelephonyConfigModal channelId={configId} userId={user.id} onClose={() => setConfigId(null)} />}
     </div>
+  );
+}
+
+const TELEPHONY_FN_URL = 'https://weckowkvqpamnlcqwvfh.supabase.co/functions/v1/telephony-call';
+
+function TelephonyConfigModal({ channelId, userId, onClose }: { channelId: string; userId: string; onClose: () => void }) {
+  const store = useStore();
+  const channel = store.commChannels.find(c => c.id === channelId);
+  const existing = (channel?.config || {}) as TelephonyConfig;
+  const [provider, setProvider] = useState(existing.provider || 'manual');
+  const [agentNumber, setAgentNumber] = useState(existing.agent_number || '');
+  const [callerId, setCallerId] = useState(existing.caller_id || '');
+  const [webhookUrl, setWebhookUrl] = useState(existing.click_to_call_url || TELEPHONY_FN_URL);
+  if (!channel) return null;
+  const def = TELEPHONY_PROVIDERS.find(p => p.value === provider) || TELEPHONY_PROVIDERS[0];
+
+  const save = () => {
+    const config: TelephonyConfig = { provider, agent_number: agentNumber.trim() || undefined, caller_id: callerId.trim() || undefined, click_to_call_url: def.webhook ? (webhookUrl.trim() || undefined) : undefined };
+    store.updateCommChannel(channelId, {
+      provider: `telephony_${provider}`,
+      display_name: def.label,
+      config: config as any,
+      status: 'connected',
+      connected_by: userId,
+      connected_at: new Date().toISOString(),
+    });
+    onClose();
+  };
+  const disable = () => { store.updateCommChannel(channelId, { status: 'disconnected', connected_by: null, connected_at: null }); onClose(); };
+
+  return (
+    <Modal open onClose={onClose} title="Telephony partner" size="md">
+      <div className="space-y-4">
+        <Select label="Telephone partner" value={provider} onChange={e => setProvider(e.target.value)}
+          options={TELEPHONY_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+        <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">{def.hint}</p>
+
+        {def.webhook ? (
+          <>
+            <Input label="Agent number (rings first)" value={agentNumber} onChange={e => setAgentNumber(e.target.value)} placeholder="+91 98xxxxxx00" />
+            <Input label={provider === 'exotel' ? 'Caller ID — your ExoPhone' : 'Caller ID (shown to the lead)'} value={callerId} onChange={e => setCallerId(e.target.value)} placeholder="+91 80xxxxxx00" />
+            <Input label="Click-to-call endpoint (your telephony-call function)" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder={TELEPHONY_FN_URL} />
+            <div className="-mt-1 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-800">
+              <b>Where do the API Key &amp; Token go?</b> Not here — they're <b>secrets</b> set on the <code className="rounded bg-amber-100 px-1">telephony-call</code> edge function, never in the browser. For Exotel set:
+              <code className="mt-1 block rounded bg-amber-100 px-1 py-0.5">EXOTEL_API_KEY, EXOTEL_API_TOKEN, EXOTEL_ACCOUNT_SID, EXOTEL_SUBDOMAIN, EXOTEL_CALLER_ID</code>
+              in Supabase → Edge Functions → Secrets. This field just points the app at that function; leave it as-is unless you self-host the bridge.
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-slate-500">The Call button opens your device or softphone with the lead's number pre-filled — no setup required.</p>
+        )}
+
+        <div className="flex items-center justify-between pt-1">
+          {channel.status === 'connected'
+            ? <button onClick={disable} className="text-xs font-medium text-slate-400 hover:text-red-600">Turn off telephony</button>
+            : <span />}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button onClick={save}><Check className="w-4 h-4" /> Save partner</Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }

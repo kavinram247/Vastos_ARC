@@ -12,6 +12,7 @@ import {
 } from './logic';
 import { ConvertLeadModal } from '../pages/ConvertLeadModal';
 import { QuotationModal } from './QuotationModal';
+import { placeCall, getTelephony } from './telephony';
 import {
   Phone, Mail, MessageSquare, MessageCircle, Users, Share2, FileText, Building2,
   CheckCircle2, CalendarClock, PhoneCall, FolderPlus, ArrowRight, RotateCcw, History,
@@ -50,6 +51,16 @@ export function LeadDetailModal({ leadId, firmId, userId, onClose, onNavigate }:
   const curIdx = actives.findIndex(s => s.key === lead.status);
   const isJunk = lead.status === 'junk';
 
+  const telephony = getTelephony(firmId);
+  const [calling, setCalling] = useState(false);
+  const doCall = async () => {
+    setCalling(true);
+    const r = await placeCall(lead, firmId, userId);
+    setCalling(false);
+    if (!r.ok) { alert(r.error || 'Could not place the call.'); return; }
+    setTab('timeline');
+  };
+
   const goStage = (key: string) => {
     const st = stageByKey(firmId, key);
     if (st?.is_lost) { setLostOpen(true); return; }
@@ -86,6 +97,11 @@ export function LeadDetailModal({ leadId, firmId, userId, onClose, onNavigate }:
               {lead.estimated_budget ? <p className="mt-1 text-sm font-semibold text-slate-700">{formatINR(lead.estimated_budget)}{lead.estimated_area ? <span className="font-normal text-slate-400"> · {lead.estimated_area} ft²</span> : ''}</p> : null}
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {telephony.enabled && lead.client_phone && (
+                <Button size="sm" onClick={doCall} disabled={calling}>
+                  <Phone className="w-3.5 h-3.5" /> {calling ? 'Calling…' : 'Call'}
+                </Button>
+              )}
               <Button size="sm" variant="secondary" onClick={() => setTab('timeline')}><PhoneCall className="w-3.5 h-3.5" /> Log</Button>
               {quotesEnabled && <Button size="sm" variant="secondary" onClick={() => setShowQuote(true)}><FileText className="w-3.5 h-3.5" /> Quote</Button>}
               {lead.converted_project_id ? (
@@ -201,7 +217,8 @@ function Overview({ lead, owner, firmId, userId }: { lead: any; owner: any; firm
   const [notes, setNotes] = useState(lead.notes || '');
   const [tag, setTag] = useState('');
   const lost = stageByKey(firmId, lead.status)?.is_lost;
-  void userId;
+  const tele = getTelephony(firmId);
+  const callLead = async () => { const r = await placeCall(lead, firmId, userId); if (!r.ok) alert(r.error || 'Could not place the call.'); };
   const addTag = () => { if (!tag.trim()) return; store.updateLead(lead.id, { tags: [...(lead.tags || []), tag.trim()] }); setTag(''); };
   const removeTag = (t: string) => store.updateLead(lead.id, { tags: (lead.tags || []).filter((x: string) => x !== t) });
 
@@ -209,7 +226,15 @@ function Overview({ lead, owner, firmId, userId }: { lead: any; owner: any; firm
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <div className="space-y-5">
         <Section title="Contact">
-          <Row icon={<Phone className="w-4 h-4" />} value={lead.client_phone} />
+          <div className="flex items-center gap-3 text-sm">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500"><Phone className="w-4 h-4" /></span>
+            <span className="flex-1">{lead.client_phone || <span className="text-slate-400">No phone</span>}</span>
+            {tele.enabled && lead.client_phone && (
+              <button onClick={callLead} className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-100">
+                <Phone className="w-3 h-3" /> Call{tele.connected && tele.provider.webhook ? ` · ${tele.provider.label.split(' ')[0]}` : ''}
+              </button>
+            )}
+          </div>
           {lead.client_email && <Row icon={<Mail className="w-4 h-4" />} value={lead.client_email} />}
           {lead.client_company && <Row icon={<Building2 className="w-4 h-4" />} value={lead.client_company} />}
         </Section>
