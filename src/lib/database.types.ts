@@ -1009,6 +1009,452 @@ export type Database = {
           },
         ]
       }
+      crm_ad_accounts: {
+        Row: {
+          connected_by: string | null
+          created_at: string
+          currency: string
+          external_account_id: string | null
+          firm_id: string
+          id: string
+          last_synced_at: string | null
+          name: string
+          provider: string
+          status: string
+          sync_interval_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          connected_by?: string | null
+          created_at?: string
+          currency?: string
+          external_account_id?: string | null
+          firm_id: string
+          id?: string
+          last_synced_at?: string | null
+          name: string
+          provider?: string
+          status?: string
+          sync_interval_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          connected_by?: string | null
+          created_at?: string
+          currency?: string
+          external_account_id?: string | null
+          firm_id?: string
+          id?: string
+          last_synced_at?: string | null
+          name?: string
+          provider?: string
+          status?: string
+          sync_interval_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_ad_accounts_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_ad_campaigns: {
+        Row: {
+          ad_account_id: string
+          created_at: string
+          daily_budget: number | null
+          external_id: string | null
+          firm_id: string
+          id: string
+          lifetime_budget: number | null
+          name: string
+          objective: string | null
+          provider: string
+          start_date: string | null
+          status: string
+          stop_date: string | null
+        }
+        Insert: {
+          ad_account_id: string
+          created_at?: string
+          daily_budget?: number | null
+          external_id?: string | null
+          firm_id: string
+          id?: string
+          lifetime_budget?: number | null
+          name: string
+          objective?: string | null
+          provider?: string
+          start_date?: string | null
+          status?: string
+          stop_date?: string | null
+        }
+        Update: {
+          ad_account_id?: string
+          created_at?: string
+          daily_budget?: number | null
+          external_id?: string | null
+          firm_id?: string
+          id?: string
+          lifetime_budget?: number | null
+          name?: string
+          objective?: string | null
+          provider?: string
+          start_date?: string | null
+          status?: string
+          stop_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_ad_campaigns_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_campaigns_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_ad_insights: {
+        Row: {
+          ad_account_id: string | null
+          ad_id: string | null
+          ad_set_id: string | null
+          campaign_id: string | null
+          clicks: number
+          created_at: string
+          date: string
+          firm_id: string
+          frequency: number
+          id: string
+          impressions: number
+          leads: number
+          level: string
+          link_clicks: number
+          platform: string | null
+          provider: string
+          reach: number
+          region: string | null
+          spend: number
+          video_views: number
+        }
+        Insert: {
+          ad_account_id?: string | null
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          clicks?: number
+          created_at?: string
+          date: string
+          firm_id: string
+          frequency?: number
+          id?: string
+          impressions?: number
+          leads?: number
+          level: string
+          link_clicks?: number
+          platform?: string | null
+          provider?: string
+          reach?: number
+          region?: string | null
+          spend?: number
+          video_views?: number
+        }
+        Update: {
+          ad_account_id?: string | null
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          clicks?: number
+          created_at?: string
+          date?: string
+          firm_id?: string
+          frequency?: number
+          id?: string
+          impressions?: number
+          leads?: number
+          level?: string
+          link_clicks?: number
+          platform?: string | null
+          provider?: string
+          reach?: number
+          region?: string | null
+          spend?: number
+          video_views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_ad_insights_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_insights_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_insights_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_insights_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_insights_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_ad_leads: {
+        Row: {
+          ad_account_id: string | null
+          ad_id: string | null
+          ad_set_id: string | null
+          campaign_id: string | null
+          contact_id: string | null
+          created_at: string
+          crm_lead_id: string | null
+          email: string | null
+          external_lead_id: string | null
+          firm_id: string
+          form_id: string | null
+          full_name: string | null
+          id: string
+          phone: string | null
+          provider: string
+          raw_fields: Json
+          received_at: string
+          status: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          crm_lead_id?: string | null
+          email?: string | null
+          external_lead_id?: string | null
+          firm_id: string
+          form_id?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          provider?: string
+          raw_fields?: Json
+          received_at?: string
+          status?: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          crm_lead_id?: string | null
+          email?: string | null
+          external_lead_id?: string | null
+          firm_id?: string
+          form_id?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          provider?: string
+          raw_fields?: Json
+          received_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_ad_leads_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_leads_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_leads_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_leads_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_leads_crm_lead_id_fkey"
+            columns: ["crm_lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_leads_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_ad_sets: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          daily_budget: number | null
+          external_id: string | null
+          firm_id: string
+          id: string
+          name: string
+          optimization_goal: string | null
+          status: string
+          targeting: Json
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          daily_budget?: number | null
+          external_id?: string | null
+          firm_id: string
+          id?: string
+          name: string
+          optimization_goal?: string | null
+          status?: string
+          targeting?: Json
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          daily_budget?: number | null
+          external_id?: string | null
+          firm_id?: string
+          id?: string
+          name?: string
+          optimization_goal?: string | null
+          status?: string
+          targeting?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_ad_sets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ad_sets_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_ads: {
+        Row: {
+          ad_set_id: string
+          campaign_id: string
+          created_at: string
+          creative: Json
+          external_id: string | null
+          firm_id: string
+          id: string
+          name: string
+          status: string
+        }
+        Insert: {
+          ad_set_id: string
+          campaign_id: string
+          created_at?: string
+          creative?: Json
+          external_id?: string | null
+          firm_id: string
+          id?: string
+          name: string
+          status?: string
+        }
+        Update: {
+          ad_set_id?: string
+          campaign_id?: string
+          created_at?: string
+          creative?: Json
+          external_id?: string | null
+          firm_id?: string
+          id?: string
+          name?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_ads_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ads_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_ads_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_comm_channels: {
         Row: {
           category: string
@@ -1481,6 +1927,133 @@ export type Database = {
           },
         ]
       }
+      crm_marketing_attribution: {
+        Row: {
+          ad_account_id: string | null
+          ad_id: string | null
+          ad_lead_id: string | null
+          ad_set_id: string | null
+          campaign_id: string | null
+          converted_project_id: string | null
+          created_at: string
+          firm_id: string
+          first_touch_at: string | null
+          id: string
+          lead_id: string | null
+          provider: string
+          quotation_id: string | null
+          region: string | null
+          revenue: number
+          salesperson_id: string | null
+          stage: string
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          ad_id?: string | null
+          ad_lead_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          converted_project_id?: string | null
+          created_at?: string
+          firm_id: string
+          first_touch_at?: string | null
+          id?: string
+          lead_id?: string | null
+          provider?: string
+          quotation_id?: string | null
+          region?: string | null
+          revenue?: number
+          salesperson_id?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          ad_id?: string | null
+          ad_lead_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          converted_project_id?: string | null
+          created_at?: string
+          firm_id?: string
+          first_touch_at?: string | null
+          id?: string
+          lead_id?: string | null
+          provider?: string
+          quotation_id?: string | null
+          region?: string | null
+          revenue?: number
+          salesperson_id?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_marketing_attribution_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_ad_lead_id_fkey"
+            columns: ["ad_lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_converted_project_id_fkey"
+            columns: ["converted_project_id"]
+            isOneToOne: false
+            referencedRelation: "crm_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_marketing_attribution_salesperson_id_fkey"
+            columns: ["salesperson_id"]
+            isOneToOne: false
+            referencedRelation: "crm_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_milestones: {
         Row: {
           actual_end: string | null
@@ -1788,6 +2361,7 @@ export type Database = {
           id: string
           phone: string | null
           role: string
+          role_id: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -1798,6 +2372,7 @@ export type Database = {
           id: string
           phone?: string | null
           role: string
+          role_id?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -1808,6 +2383,7 @@ export type Database = {
           id?: string
           phone?: string | null
           role?: string
+          role_id?: string | null
         }
         Relationships: [
           {
@@ -1815,6 +2391,13 @@ export type Database = {
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_profiles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "crm_roles"
             referencedColumns: ["id"]
           },
         ]
@@ -2040,6 +2623,101 @@ export type Database = {
           },
         ]
       }
+      crm_role_permissions: {
+        Row: {
+          actions: string[]
+          created_at: string
+          firm_id: string
+          id: string
+          module: string
+          role_id: string
+        }
+        Insert: {
+          actions?: string[]
+          created_at?: string
+          firm_id: string
+          id: string
+          module: string
+          role_id: string
+        }
+        Update: {
+          actions?: string[]
+          created_at?: string
+          firm_id?: string
+          id?: string
+          module?: string
+          role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_role_permissions_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "crm_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_roles: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          enabled: boolean
+          firm_id: string
+          id: string
+          is_admin: boolean
+          is_system: boolean
+          key: string
+          name: string
+          scope: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          firm_id: string
+          id: string
+          is_admin?: boolean
+          is_system?: boolean
+          key: string
+          name: string
+          scope?: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          firm_id?: string
+          id?: string
+          is_admin?: boolean
+          is_system?: boolean
+          key?: string
+          name?: string
+          scope?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_roles_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_site_updates: {
         Row: {
           created_at: string
@@ -2074,6 +2752,63 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "crm_site_updates_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_sync_runs: {
+        Row: {
+          ad_account_id: string | null
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          firm_id: string
+          id: string
+          provider: string
+          rows_upserted: number
+          started_at: string
+          status: string
+          trigger: string
+        }
+        Insert: {
+          ad_account_id?: string | null
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          firm_id: string
+          id?: string
+          provider?: string
+          rows_upserted?: number
+          started_at?: string
+          status?: string
+          trigger?: string
+        }
+        Update: {
+          ad_account_id?: string | null
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          firm_id?: string
+          id?: string
+          provider?: string
+          rows_upserted?: number
+          started_at?: string
+          status?: string
+          trigger?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_sync_runs_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "crm_ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sync_runs_firm_id_fkey"
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"
@@ -3407,6 +4142,54 @@ export type Database = {
           },
         ]
       }
+      task_activity: {
+        Row: {
+          actor_id: string | null
+          actor_name: string | null
+          created_at: string
+          detail: string | null
+          firm_id: string
+          id: string
+          kind: string
+          task_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_name?: string | null
+          created_at?: string
+          detail?: string | null
+          firm_id: string
+          id?: string
+          kind: string
+          task_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_name?: string | null
+          created_at?: string
+          detail?: string | null
+          firm_id?: string
+          id?: string
+          kind?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_activity_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_activity_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_assign_privileges: {
         Row: {
           firm_id: string
@@ -3442,10 +4225,98 @@ export type Database = {
           },
         ]
       }
+      task_lists: {
+        Row: {
+          color: string
+          created_at: string
+          created_by: string | null
+          firm_id: string
+          icon: string | null
+          id: string
+          name: string
+          order_index: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          firm_id: string
+          icon?: string | null
+          id?: string
+          name: string
+          order_index?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          firm_id?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          order_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_lists_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_subtasks: {
+        Row: {
+          created_at: string
+          done: boolean
+          firm_id: string
+          id: string
+          order_index: number
+          task_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          done?: boolean
+          firm_id: string
+          id?: string
+          order_index?: number
+          task_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          done?: boolean
+          firm_id?: string
+          id?: string
+          order_index?: number
+          task_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_subtasks_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_subtasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
+          archived_at: string | null
           assignee_id: string
           assignee_name: string
+          attachments: Json
           completed_at: string | null
           created_at: string
           created_by_id: string
@@ -3454,16 +4325,30 @@ export type Database = {
           due_date: string | null
           firm_id: string
           id: string
+          is_followup: boolean
+          link_id: string | null
+          link_label: string | null
+          link_type: string | null
+          list_id: string | null
+          notes: string | null
+          order_index: number
           priority: string
+          progress: number
           project_id: string | null
           project_name: string | null
+          reminder_at: string | null
+          repeat: string
+          start_date: string | null
           status: string
+          tags: string[]
           title: string
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           assignee_id: string
           assignee_name: string
+          attachments?: Json
           completed_at?: string | null
           created_at?: string
           created_by_id: string
@@ -3472,16 +4357,30 @@ export type Database = {
           due_date?: string | null
           firm_id: string
           id?: string
+          is_followup?: boolean
+          link_id?: string | null
+          link_label?: string | null
+          link_type?: string | null
+          list_id?: string | null
+          notes?: string | null
+          order_index?: number
           priority?: string
+          progress?: number
           project_id?: string | null
           project_name?: string | null
+          reminder_at?: string | null
+          repeat?: string
+          start_date?: string | null
           status?: string
+          tags?: string[]
           title: string
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           assignee_id?: string
           assignee_name?: string
+          attachments?: Json
           completed_at?: string | null
           created_at?: string
           created_by_id?: string
@@ -3490,10 +4389,22 @@ export type Database = {
           due_date?: string | null
           firm_id?: string
           id?: string
+          is_followup?: boolean
+          link_id?: string | null
+          link_label?: string | null
+          link_type?: string | null
+          list_id?: string | null
+          notes?: string | null
+          order_index?: number
           priority?: string
+          progress?: number
           project_id?: string | null
           project_name?: string | null
+          reminder_at?: string | null
+          repeat?: string
+          start_date?: string | null
           status?: string
+          tags?: string[]
           title?: string
           updated_at?: string
         }
@@ -3503,6 +4414,13 @@ export type Database = {
             columns: ["firm_id"]
             isOneToOne: false
             referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "task_lists"
             referencedColumns: ["id"]
           },
         ]
@@ -3753,6 +4671,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      crm_current_role_id: { Args: never; Returns: string }
+      crm_has_permission: {
+        Args: { p_action: string; p_module: string }
+        Returns: boolean
+      }
       current_firm_id: { Args: never; Returns: string }
       resolve_rate: {
         Args: {

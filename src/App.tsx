@@ -24,7 +24,7 @@ import { BoqEstimatorPage } from './boq/pages/BoqEstimatorPage';
 import { CatalogAdminPage } from './boq/pages/CatalogAdminPage';
 import { QuotationsPage } from './boq/pages/QuotationsPage';
 import { VendorsPage } from './boq/pages/VendorsPage';
-import { TasksPage } from './pages/TasksPage';
+import { TasksPage } from './tasks/TasksPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { CalibrationPage } from './boq/pages/CalibrationPage';
 import { ClientQuotePage } from './boq/pages/ClientQuotePage';
@@ -121,7 +121,7 @@ function AppInner() {
       case 'leads-admin':
         return <LeadsAdminPage onNavigate={navigate} />;
       case 'tasks':
-        return <TasksPage />;
+        return <TasksPage onNavigate={navigate} />;
       case 'attendance':
         return <AttendancePage />;
       case 'boq':
