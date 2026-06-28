@@ -16,7 +16,7 @@
 import {
   LayoutDashboard, TrendingUp, FolderKanban, ListChecks, CalendarCheck,
   Calculator, Receipt, Truck, Database, Target, Users, ShieldCheck, Bell, Activity,
-  Home, Milestone as MilestoneIcon, Wallet, IndianRupee, FileText, MessageSquare, Camera, BarChart3,
+  Home, Milestone as MilestoneIcon, Wallet, IndianRupee, FileText, MessageSquare, Camera, BarChart3, Settings,
 } from 'lucide-react';
 import type { Page } from '../types';
 import { store } from '../data/store';
@@ -29,8 +29,8 @@ export const ACTION_LABELS: Record<Action, string> = {
   assign: 'Assign', import: 'Import', export: 'Export', approve: 'Approve',
 };
 
-export type NavGroupName = 'Workspace' | 'Commercial' | 'Firm';
-export const NAV_GROUPS: NavGroupName[] = ['Workspace', 'Commercial', 'Firm'];
+export type NavGroupName = 'Workspace' | 'Commercial' | 'Admin';
+export const NAV_GROUPS: NavGroupName[] = ['Workspace', 'Commercial', 'Admin'];
 
 export interface ModuleDef {
   key: string;
@@ -62,10 +62,11 @@ export const MODULES: ModuleDef[] = [
   { key: 'catalog',       label: 'Catalog & Rates', group: 'Commercial', page: 'catalog',         nav: true,  icon: Database,        actions: ['view', 'create', 'edit', 'delete', 'import', 'export'] },
   { key: 'calibration',   label: 'Accuracy',        group: 'Commercial', page: 'calibration',     nav: true,  icon: Target,          actions: ['view', 'edit'] },
 
-  { key: 'users',         label: 'Users',           group: 'Firm',       page: 'user-management', nav: true,  icon: Users,           actions: ['view', 'create', 'edit', 'delete', 'assign'] },
-  { key: 'roles',         label: 'Roles & Access',  group: 'Firm',       page: 'roles',           nav: true,  icon: ShieldCheck,     actions: ['view', 'create', 'edit', 'delete'] },
-  { key: 'notifications', label: 'Notifications',   group: 'Firm',       page: 'notifications',   nav: true,  icon: Bell,            actions: ['view'] },
-  { key: 'activity-log',  label: 'Activity Log',    group: 'Firm',       page: 'activity-log',    nav: true,  icon: Activity,        actions: ['view', 'export'] },
+  { key: 'leads-admin',   label: 'Leads Admin',     group: 'Admin',       page: 'leads-admin',     nav: true,  icon: Settings,        actions: ['view', 'edit'] },
+  { key: 'users',         label: 'Users',           group: 'Admin',       page: 'user-management', nav: true,  icon: Users,           actions: ['view', 'create', 'edit', 'delete', 'assign'] },
+  { key: 'roles',         label: 'Roles & Access',  group: 'Admin',       page: 'roles',           nav: true,  icon: ShieldCheck,     actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'notifications', label: 'Notifications',   group: 'Admin',       page: 'notifications',   nav: true,  icon: Bell,            actions: ['view'] },
+  { key: 'activity-log',  label: 'Activity Log',    group: 'Admin',       page: 'activity-log',    nav: true,  icon: Activity,        actions: ['view', 'export'] },
 
   // Project sub-pages — permissioned but not in the sidebar.
   { key: 'milestones',    label: 'Milestones',      group: null,         page: 'milestones',      nav: false, icon: MilestoneIcon,   actions: ['view', 'create', 'edit', 'delete'] },

@@ -13,7 +13,7 @@ import {
 import { AddLeadModal } from './AddLeadModal';
 import { LeadDetailModal } from './LeadDetailModal';
 import {
-  TrendingUp, Search, UserPlus, Settings, AlertTriangle, Clock, Sparkles,
+  TrendingUp, Search, UserPlus, AlertTriangle, Clock, Sparkles,
   IndianRupee, Ruler, Lock, ArrowUpDown,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -81,9 +81,6 @@ export function LeadsPage({ onNavigate }: Props) {
           <p className="mt-1 text-sm text-slate-500">Capture every inquiry, act on the right ones, and convert deals into live projects.</p>
         </div>
         <div className="flex items-center gap-2">
-          {can('leads', 'edit') && (
-            <Button variant="secondary" size="sm" onClick={() => onNavigate?.('leads-admin')}><Settings className="w-4 h-4" /> Admin</Button>
-          )}
           {can('leads', 'create') && <Button size="sm" onClick={() => setShowAdd(true)}><UserPlus className="w-4 h-4" /> Add lead</Button>}
         </div>
       </div>
