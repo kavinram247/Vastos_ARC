@@ -2868,6 +2868,57 @@ export type Database = {
           },
         ]
       }
+      firm_subscriptions: {
+        Row: {
+          created_at: string
+          current_period_ends_at: string | null
+          firm_id: string
+          id: string
+          plan_id: string
+          seats_purchased: number
+          status: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_period_ends_at?: string | null
+          firm_id: string
+          id?: string
+          plan_id: string
+          seats_purchased?: number
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_period_ends_at?: string | null
+          firm_id?: string
+          id?: string
+          plan_id?: string
+          seats_purchased?: number
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_subscriptions_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "firm_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       firms: {
         Row: {
           address: string | null
@@ -4142,6 +4193,45 @@ export type Database = {
           },
         ]
       }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          max_projects: number | null
+          max_users: number | null
+          module_keys: Json
+          name: string
+          price_annual: number
+          price_monthly: number
+          storage_gb: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_projects?: number | null
+          max_users?: number | null
+          module_keys?: Json
+          name: string
+          price_annual?: number
+          price_monthly?: number
+          storage_gb?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_projects?: number | null
+          max_users?: number | null
+          module_keys?: Json
+          name?: string
+          price_annual?: number
+          price_monthly?: number
+          storage_gb?: number | null
+        }
+        Relationships: []
+      }
       task_activity: {
         Row: {
           actor_id: string | null
@@ -4421,6 +4511,53 @@ export type Database = {
             columns: ["list_id"]
             isOneToOne: false
             referencedRelation: "task_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          firm_id: string
+          full_name: string | null
+          id: string
+          invited_by: string | null
+          role_id: string | null
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          firm_id: string
+          full_name?: string | null
+          id?: string
+          invited_by?: string | null
+          role_id?: string | null
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          firm_id?: string
+          full_name?: string | null
+          id?: string
+          invited_by?: string | null
+          role_id?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_invites_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
             referencedColumns: ["id"]
           },
         ]

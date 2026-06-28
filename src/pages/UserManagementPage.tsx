@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+import { useAuth, usePlan } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { AccessDenied } from '../components/AccessDenied';
@@ -13,7 +14,7 @@ import type { UserRole } from '../types';
 import {
   Users, Edit2, Trash2, Mail, Phone, Shield, Palette,
   HardHat, User, Search, FolderKanban, Check,
-  UserPlus, MoreVertical,
+  UserPlus, MoreVertical, Loader2,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -321,105 +322,143 @@ export function UserManagementPage() {
 // Invite User Modal
 function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: () => void; firmId: string }) {
   const store = useStore();
+  const plan = usePlan();
   const firmRoles = store.roles.filter(r => r.firm_id === firmId && r.enabled);
+  const currentUserCount = store.profiles.filter(p => p.firm_id === firmId).length;
+  const userLimit = plan?.max_users ?? null;
+  const limitReached = userLimit !== null && currentUserCount >= userLimit;
   const defaultRoleId = firmRoles.find(r => r.key === 'engineer')?.id || firmRoles[0]?.id || '';
-  const [form, setForm] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    role_id: defaultRoleId,
-    send_invite: true,
-  });
-  const [sent, setSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', role_id: defaultRoleId });
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const handleClose = () => {
+    setForm({ full_name: '', email: '', phone: '', role_id: defaultRoleId });
+    setInviteLink(null); setError(''); setSubmitting(false); setCopied(false);
+    onClose();
+  };
+
+  const handleCopy = () => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name || !form.email) return;
+    if (!form.full_name.trim() || !form.email.trim()) return;
+    setSubmitting(true);
+    setError('');
 
     const role = store.roles.find(r => r.id === form.role_id);
-    // Mirror a legacy UserRole for back-compat displays; role_id is the source of truth.
     const legacyRole: UserRole = (['owner', 'architect', 'engineer', 'client'] as const).includes(role?.key as UserRole)
       ? (role!.key as UserRole)
       : 'engineer';
-    // Add the new profile (write-through to Supabase)
-    store.addProfile({
-      firm_id: firmId,
-      email: form.email,
-      full_name: form.full_name,
-      role: legacyRole,
-      role_id: form.role_id || null,
-      phone: form.phone || undefined,
-    });
-    setSent(true);
+    const email = form.email.trim().toLowerCase();
 
-    setTimeout(() => {
-      setSent(false);
-      setForm({ full_name: '', email: '', phone: '', role_id: defaultRoleId, send_invite: true });
-      onClose();
-    }, 1500);
+    try {
+      // 1. Create auth-linked profiles row (AcceptInvitePage will update auth_uid here)
+      const { error: pe } = await (supabase as any).from('profiles').insert({
+        firm_id: firmId, email, full_name: form.full_name.trim(),
+        role: legacyRole, phone: form.phone.trim() || null,
+      });
+      if (pe) throw pe;
+
+      // 2. Create crm_profiles row with explicit id (RBAC role assignment)
+      const crmId = crypto.randomUUID();
+      const { error: cpe } = await (supabase as any).from('crm_profiles').insert({
+        id: crmId, firm_id: firmId, email, full_name: form.full_name.trim(),
+        role: legacyRole, role_id: form.role_id || null, phone: form.phone.trim() || null,
+      });
+      if (cpe) throw cpe;
+
+      // 3. Update local store for immediate list display
+      store.addProfile({
+        firm_id: firmId, email, full_name: form.full_name.trim(),
+        role: legacyRole, role_id: form.role_id || null,
+        phone: form.phone.trim() || undefined,
+      });
+
+      // 4. Generate invite token — no Supabase auth email, admin shares the link manually
+      const { data: invite, error: ie } = await (supabase as any).from('user_invites')
+        .insert({ firm_id: firmId, email, full_name: form.full_name.trim(), role_id: form.role_id || null })
+        .select('token').single();
+      if (ie) throw ie;
+
+      setInviteLink(`${window.location.origin}?invite=${invite.token}`);
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to create user.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Invite New User" size="md">
-      {sent ? (
-        <div className="text-center py-8">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Check className="w-8 h-8 text-green-600" />
+    <Modal open={open} onClose={handleClose} title="Invite New User" size="md">
+      {limitReached ? (
+        <div className="text-center py-8 space-y-3">
+          <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <Users className="w-7 h-7 text-amber-600" />
           </div>
-          <h3 className="text-lg font-semibold text-slate-900">Invitation Sent!</h3>
-          <p className="text-sm text-slate-500 mt-1">
-            {form.full_name} will receive an email to join your firm.
+          <h3 className="text-base font-semibold text-slate-900">User limit reached</h3>
+          <p className="text-sm text-slate-500 max-w-xs mx-auto">
+            Your account has reached its limit of <strong>{userLimit} users</strong>.
+            To add more team members, please upgrade your plan or contact the VASTOS administrator for additional user licenses.
           </p>
+          <Button variant="primary" onClick={handleClose}>Close</Button>
         </div>
+
+      ) : inviteLink ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 shrink-0">
+              <Check className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{form.full_name} added successfully</p>
+              <p className="text-xs text-slate-500">Share this invite link with them to set their password.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input readOnly value={inviteLink}
+              className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none" />
+            <button onClick={handleCopy}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shrink-0">
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p className="text-xs text-amber-600">⚠ Link expires in 7 days.</p>
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={handleClose}>Done</Button>
+          </div>
+        </div>
+
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Full Name"
-            required
-            value={form.full_name}
-            onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-            placeholder="John Doe"
-          />
-          <Input
-            label="Email"
-            type="email"
-            required
-            value={form.email}
-            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            placeholder="john@example.com"
-          />
-          <Input
-            label="Phone Number"
-            value={form.phone}
-            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-            placeholder="+91 98200 12345"
-          />
-          <Select
-            label="Role"
-            value={form.role_id}
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
+          <Input label="Full Name" required value={form.full_name}
+            onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="John Doe" />
+          <Input label="Email" type="email" required value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="john@example.com" />
+          <Input label="Phone Number" value={form.phone}
+            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98200 12345" />
+          <Select label="Role" value={form.role_id}
             onChange={e => setForm(f => ({ ...f, role_id: e.target.value }))}
-            options={firmRoles.map(r => ({ value: r.id, label: r.name }))}
-          />
-
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={form.send_invite}
-              onChange={e => setForm(f => ({ ...f, send_invite: e.target.checked }))}
-              className="rounded border-slate-300"
-            />
-            Send email invitation
-          </label>
-
+            options={firmRoles.map(r => ({ value: r.id, label: r.name }))} />
           <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
-            <p className="font-medium mb-1">Roles control access</p>
-            <p>Module and action permissions for each role are managed in <b>Roles &amp; Access</b>. You can reassign a user's role there at any time.</p>
+            <p className="font-medium mb-1">How it works</p>
+            <p>Creates the account and generates an invite link. Share the link with the team member — they'll use it to set their password. No email is sent automatically.</p>
           </div>
-
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-            <Button type="submit">
-              <UserPlus className="w-4 h-4" /> Send Invite
+            <Button variant="secondary" type="button" onClick={handleClose}>Cancel</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+              Create &amp; get link
             </Button>
           </div>
         </form>

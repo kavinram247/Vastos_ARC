@@ -1,6 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useStore } from './hooks/useStore';
+const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })));
+const VastosAdminPage  = lazy(() => import('./pages/VastosAdminPage').then(m => ({ default: m.VastosAdminPage })));
 import { Loader2 } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
@@ -150,9 +152,10 @@ function AppInner() {
   );
 }
 
-function HydrationGate() {
+// Hydrates the store for the authenticated firm, then renders the app.
+function HydrationGate({ firmId }: { firmId: string }) {
   const store = useStore();
-  useEffect(() => { store.hydrate().catch((e) => console.error('hydrate failed', e)); }, []);
+  useEffect(() => { store.hydrate(firmId).catch((e) => console.error('hydrate failed', e)); }, [firmId]);
   if (!store.loaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-400">
@@ -160,17 +163,37 @@ function HydrationGate() {
       </div>
     );
   }
-  return (
-    <AuthProvider>
-      <AppInner />
-    </AuthProvider>
-  );
+  return <AppInner />;
+}
+
+// Auth-aware shell: waits for Supabase session check, then routes.
+function AppShell() {
+  const { isAuthenticated, isLoading, firm } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-400">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" /> Checking session…
+      </div>
+    );
+  }
+  if (!isAuthenticated) return <LoginPage />;
+  return <HydrationGate firmId={firm!.id} />;
 }
 
 export default function App() {
-  // Public client-quote route — no auth, no app shell.
-  const quoteToken = new URLSearchParams(window.location.search).get('quote');
-  if (quoteToken) return <ClientQuotePage token={quoteToken} />;
+  const params = new URLSearchParams(window.location.search);
 
-  return <HydrationGate />;
+  // Public routes — no auth required
+  if (params.get('quote'))
+    return <ClientQuotePage token={params.get('quote')!} />;
+  if (params.get('invite'))
+    return <Suspense fallback={null}><AcceptInvitePage token={params.get('invite')!} /></Suspense>;
+  if (params.get('vastos-admin') === 'true')
+    return <Suspense fallback={null}><VastosAdminPage /></Suspense>;
+
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  );
 }

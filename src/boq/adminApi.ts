@@ -117,3 +117,90 @@ export async function saveRegion(id: string, r: { material_index: number; labour
   const { error } = await supabase.from('regions').update(r as any).eq('id', id);
   if (error) throw error;
 }
+
+// ── Templates & Rules admin ────────────────────────────────────
+
+export interface RuleAdminRow {
+  id: string; template_id: string; seq: number; label: string;
+  output_kind: 'material' | 'labour' | 'hardware' | 'service';
+  product_id: string | null; labour_activity_id: string | null;
+  qty_formula: string; condition: string | null; uom: string;
+}
+
+export interface TemplateAdminRow {
+  id: string; code: string; name: string; category: string;
+  description: string | null; param_schema: Record<string, any>;
+  derived_vars: Array<{ name: string; formula: string }>;
+  is_active: boolean; rules: RuleAdminRow[];
+}
+
+export async function fetchTemplatesAdmin(): Promise<TemplateAdminRow[]> {
+  const [{ data: tpls, error: e1 }, { data: rules, error: e2 }] = await Promise.all([
+    supabase.from('module_templates').select('id,code,name,category,description,param_schema,derived_vars,is_active').order('name'),
+    supabase.from('module_rules').select('id,template_id,seq,output_kind,product_id,labour_activity_id,label,condition,qty_formula,uom').order('seq'),
+  ]);
+  if (e1) throw e1; if (e2) throw e2;
+  const byTpl = new Map<string, RuleAdminRow[]>();
+  for (const r of (rules || []) as any[]) {
+    const arr = byTpl.get(r.template_id) || [];
+    arr.push(r as RuleAdminRow);
+    byTpl.set(r.template_id, arr);
+  }
+  return (tpls || []).map((t: any) => ({
+    id: t.id, code: t.code, name: t.name, category: t.category,
+    description: t.description, param_schema: t.param_schema || {},
+    derived_vars: Array.isArray(t.derived_vars) ? t.derived_vars : [],
+    is_active: t.is_active, rules: byTpl.get(t.id) || [],
+  }));
+}
+
+export async function updateTemplateActive(id: string, is_active: boolean): Promise<void> {
+  const { error } = await supabase.from('module_templates').update({ is_active, updated_at: new Date().toISOString() } as any).eq('id', id);
+  if (error) throw error;
+}
+
+export async function saveTemplateMeta(id: string, data: { name: string; description: string; category: string; derived_vars: any[]; param_schema: any }): Promise<void> {
+  const { error } = await supabase.from('module_templates').update({ ...data, updated_at: new Date().toISOString() } as any).eq('id', id);
+  if (error) throw error;
+}
+
+export async function createTemplateFull(data: { code: string; name: string; category: string; description: string; param_schema: any; derived_vars: any[] }, firmId = DEMO_FIRM_ID): Promise<string> {
+  const { data: row, error } = await supabase.from('module_templates')
+    .insert({ ...data, firm_id: firmId, is_active: true } as any).select('id').single();
+  if (error) throw error;
+  return (row as any).id;
+}
+
+export async function saveRule(rule: Omit<RuleAdminRow, 'id'>): Promise<RuleAdminRow> {
+  const { data, error } = await supabase.from('module_rules').insert(rule as any).select('id,template_id,seq,output_kind,product_id,labour_activity_id,label,condition,qty_formula,uom').single();
+  if (error) throw error;
+  return data as RuleAdminRow;
+}
+
+export async function updateRule(id: string, data: Partial<Omit<RuleAdminRow, 'id'>>): Promise<void> {
+  const { error } = await supabase.from('module_rules').update(data as any).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteRule(id: string): Promise<void> {
+  const { error } = await supabase.from('module_rules').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export interface ProductSimple { id: string; name: string; base_uom: string; category: string }
+export interface LabourSimple { id: string; name: string; code: string; base_uom: string; trade: string | null }
+
+export async function fetchProductsSimple(): Promise<ProductSimple[]> {
+  const [{ data: cats }, { data: prods }] = await Promise.all([
+    supabase.from('catalog_categories').select('id,name'),
+    supabase.from('catalog_products').select('id,name,base_uom,category_id').eq('is_active', true).order('name'),
+  ]);
+  const catName = new Map(((cats || []) as any[]).map((c: any) => [c.id, c.name]));
+  return ((prods || []) as any[]).map((p: any) => ({ id: p.id, name: p.name, base_uom: p.base_uom, category: catName.get(p.category_id) || '' }));
+}
+
+export async function fetchLabourSimple(): Promise<LabourSimple[]> {
+  const { data, error } = await supabase.from('labour_activities').select('id,name,code,base_uom,trade').order('name');
+  if (error) throw error;
+  return ((data || []) as any[]).map((a: any) => ({ id: a.id, name: a.name, code: a.code, base_uom: a.base_uom, trade: a.trade }));
+}

@@ -16,7 +16,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
-  const { user, firm, logout } = useAuth();
+  const { user, firm, signOut } = useAuth();
   const store = useStore();
   const { can, canAccess } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -156,7 +156,7 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
             {userMenuOpen && (
               <div className="floating-panel absolute bottom-full left-0 right-0 mb-2 py-1">
                 <button
-                  onClick={() => { logout(); setUserMenuOpen(false); }}
+                  onClick={() => { signOut(); setUserMenuOpen(false); }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="w-4 h-4" />
