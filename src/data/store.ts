@@ -61,6 +61,36 @@ class DataStore {
     this.listeners.forEach(fn => fn());
   }
 
+  // ─── Reset (call on logout so the next login re-hydrates from DB) ───
+  reset() {
+    this.loaded = false;
+    this.hydrating = null;
+    this.roles = [];
+    this.rolePermissions = [];
+    this.profiles = [];
+    this.projects = [];
+    this.assignments = [];
+    this.milestones = [];
+    this.siteUpdates = [];
+    this.paymentPlans = [];
+    this.paymentSplits = [];
+    this.paymentsReceived = [];
+    this.costEntries = [];
+    this.comments = [];
+    this.notifications = [];
+    this.activityLog = [];
+    this.leads = [];
+    this.leadInteractions = [];
+    this.leadQuotations = [];
+    this.projectDocuments = [];
+    this.projectVendors = [];
+    this.contacts = [];
+    this.pipelineStages = [];
+    this.featureFlags = [];
+    this.commChannels = [];
+    this.notify();
+  }
+
   // ─── Hydration (idempotent) ───
   hydrate(firmId = DEMO_FIRM_ID): Promise<void> {
     if (this.loaded) return Promise.resolve();
@@ -635,19 +665,19 @@ class DataStore {
     crm.persistUpdateWhere('profiles', { role_id: id }, { role_id: null });
   }
 
-  /** Upsert the granted actions for one (role, module) pair. */
-  setRolePermissions(roleId: string, module: string, actions: string[], firmId?: string) {
+  /** Upsert the granted actions for one (role, module) pair. Returns DB error message if the write fails. */
+  async setRolePermissions(roleId: string, module: string, actions: string[], firmId?: string): Promise<string | null> {
     const idx = this.rolePermissions.findIndex(p => p.role_id === roleId && p.module === module);
     if (idx >= 0) {
       this.rolePermissions[idx] = { ...this.rolePermissions[idx], actions };
       this.notify();
-      crm.persistUpdate('rolePermissions', this.rolePermissions[idx].id, { actions });
+      return crm.awaitUpdate('rolePermissions', this.rolePermissions[idx].id, { actions });
     } else {
       const fid = firmId || this.roles.find(r => r.id === roleId)?.firm_id || '';
       const row: RolePermission = { id: uuid(), firm_id: fid, role_id: roleId, module, actions, created_at: nowISO() };
       this.rolePermissions.push(row);
       this.notify();
-      crm.persistInsert('rolePermissions', row);
+      return crm.awaitInsert('rolePermissions', row);
     }
   }
 

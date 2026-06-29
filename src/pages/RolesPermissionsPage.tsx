@@ -164,14 +164,22 @@ function RoleDetail({ role, firmId, actorId, canEdit, canManageMembers, canDelet
 }) {
   const store = useStore(); // subscribe; recompute perms each render
   const [showEdit, setShowEdit] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   void store;
   const perms = permissionsForRole(role.id);
 
-  const toggle = (moduleKey: string, action: Action, allowed: boolean) => {
+  const toggle = async (moduleKey: string, action: Action, allowed: boolean) => {
     if (!canEdit) return;
+    setSaveError(null);
     const current = (perms[moduleKey] || []) as Action[];
     const next = allowed ? current.filter(a => a !== action) : [...current, action];
-    store.setRolePermissions(role.id, moduleKey, next, firmId);
+    const err = await store.setRolePermissions(role.id, moduleKey, next, firmId);
+    if (err) {
+      setSaveError(`Failed to save: ${err}`);
+      // Roll back the in-memory change so UI stays consistent with DB
+      store.setRolePermissions(role.id, moduleKey, current, firmId);
+      return;
+    }
     logAdminAction({ firmId, actorId, action: 'updated', actionLabel: `Updated "${role.name}" permissions`, module: 'permission', entityId: role.id, entityName: role.name, details: `${moduleKey}: ${next.join(', ') || 'none'}` });
   };
 
@@ -196,6 +204,10 @@ function RoleDetail({ role, firmId, actorId, canEdit, canManageMembers, canDelet
           {canDelete && !role.is_system && <Button variant="danger" size="sm" onClick={onAskDelete}><Trash2 className="h-4 w-4" /> Delete</Button>}
         </div>
       </div>
+
+      {saveError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700">{saveError}</div>
+      )}
 
       {role.is_admin && (
         <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-2.5 text-xs text-indigo-700">

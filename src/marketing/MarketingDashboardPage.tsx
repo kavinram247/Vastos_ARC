@@ -18,7 +18,7 @@ import { logAdminAction } from '../lib/events';
 import type { MarketingDataset } from './types';
 import {
   BarChart3, Loader2, Plug, Download, FileSpreadsheet, Printer, ChevronRight, ChevronDown,
-  Lightbulb, AlertTriangle, TrendingUp, Info, Sparkles,
+  Lightbulb, AlertTriangle, TrendingUp, Info, Sparkles, ArrowRight,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -140,6 +140,33 @@ export function MarketingDashboardPage({ onNavigate }: Props) {
         <KpiCard label="CPM" value={money(Math.round(a.kpi.cpm))} accent="slate" />
       </div>
 
+      {/* Attribution pipeline */}
+      <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-[0_1px_2px_rgba(16,32,26,0.04)]">
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-slate-800">Spend → Leads → Revenue</div>
+          <div className="text-[11px] text-slate-400">Full attribution pipeline — every rupee of ad spend tracked to the closed deal</div>
+        </div>
+        <div className="flex flex-nowrap items-stretch gap-0 overflow-x-auto pb-1">
+          {[
+            { label: 'Ad Spend', value: money(a.kpi.spend), sub: `${pct(a.budget.pct)} of budget`, bg: 'bg-slate-50', text: 'text-slate-900', border: 'border-slate-200' },
+            { label: 'Platform Leads', value: intf(a.kpi.platformLeads), sub: `CPL ${money(a.kpi.cpl)}`, bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-200' },
+            { label: 'CRM Captured', value: intf(a.kpi.crmLeads), sub: `${pct(a.kpi.crmLeads / Math.max(1, a.kpi.platformLeads))} captured`, bg: 'bg-violet-50', text: 'text-violet-800', border: 'border-violet-200' },
+            { label: 'Qualified', value: intf(a.kpi.qualified), sub: `${pct(a.kpi.qualified / Math.max(1, a.kpi.crmLeads))} of leads`, bg: 'bg-sky-50', text: 'text-sky-800', border: 'border-sky-200' },
+            { label: 'Deals Won', value: intf(a.kpi.wins), sub: `CAC ${money(a.kpi.cac)}`, bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200' },
+            { label: 'Revenue', value: money(a.kpi.revenue), sub: `ROAS ${xf(a.kpi.roas)}`, bg: 'bg-emerald-100', text: 'text-emerald-900', border: 'border-emerald-300' },
+          ].map((stage, i, arr) => (
+            <div key={stage.label} className="flex items-center">
+              <div className={cn('flex min-w-[110px] flex-col items-center rounded-xl border px-3 py-3 text-center', stage.bg, stage.border)}>
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{stage.label}</div>
+                <div className={cn('mt-1 text-lg font-bold tabular-nums', stage.text)}>{stage.value}</div>
+                <div className="text-[10px] text-slate-400">{stage.sub}</div>
+              </div>
+              {i < arr.length - 1 && <ArrowRight className="mx-1.5 h-4 w-4 shrink-0 text-slate-300" />}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Trend + funnel */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="Spend vs Revenue" className="lg:col-span-2">
@@ -150,6 +177,18 @@ export function MarketingDashboardPage({ onNavigate }: Props) {
             ]} />
         </Panel>
         <Panel title="Conversion funnel"><Funnel stages={a.fn} /></Panel>
+      </div>
+
+      {/* Leads + CPL trend */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Leads over time" subtitle="Platform leads captured per day">
+          <LineChart labels={a.ts.map(t => t.date)} fmt={intf}
+            series={[{ name: 'Leads', color: '#6366f1', values: a.ts.map(t => t.leads) }]} />
+        </Panel>
+        <Panel title="Cost per lead trend" subtitle="Daily spend ÷ daily platform leads">
+          <LineChart labels={a.ts.map(t => t.date)} fmt={money}
+            series={[{ name: 'CPL', color: '#f59e0b', values: a.ts.map(t => t.leads > 0 ? Math.round(t.spend / t.leads) : 0) }]} />
+        </Panel>
       </div>
 
       {/* ROAS + platform + region */}

@@ -74,6 +74,14 @@ export function persistUpsert(key: StoreKey, row: any) {
 export function persistUpdate(key: StoreKey, id: string, patch: any) {
   sb.from(TABLES[key]).update(patch).eq('id', id).then(({ error }: any) => { if (error) console.error(`update ${TABLES[key]}`, error.message); });
 }
+export async function awaitUpdate(key: StoreKey, id: string, patch: any): Promise<string | null> {
+  const { error } = await sb.from(TABLES[key]).update(patch).eq('id', id);
+  return error?.message ?? null;
+}
+export async function awaitInsert(key: StoreKey, row: any): Promise<string | null> {
+  const { error } = await sb.from(TABLES[key]).insert(row);
+  return error?.message ?? null;
+}
 export function persistUpdateWhere(key: StoreKey, match: Record<string, any>, patch: any) {
   let q = sb.from(TABLES[key]).update(patch);
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v);

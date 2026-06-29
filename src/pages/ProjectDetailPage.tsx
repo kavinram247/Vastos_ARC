@@ -46,7 +46,7 @@ const vendorStatusConfig: Record<string, { label: string; variant: 'success' | '
 export function ProjectDetailPage({ projectId, onNavigate }: Props) {
   const { user, firm } = useAuth();
   const store = useStore();
-  const { can } = usePermissions();
+  const { can, canAccess } = usePermissions();
   const [showAddVendorModal, setShowAddVendorModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState<string | null>(null);
   const [vendorMenuOpen, setVendorMenuOpen] = useState<string | null>(null);
@@ -106,7 +106,7 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
     { page: 'costs' as Page, label: 'Costs & Profit', icon: TrendingUp, desc: `Profit: ${formatINRCompact(profit)}`, color: 'text-purple-600 bg-purple-50' },
     { page: 'documents' as Page, label: 'Documents', icon: FileIcon, desc: `${docs.length} file${docs.length !== 1 ? 's' : ''}`, color: 'text-rose-600 bg-rose-50' },
     { page: 'comments' as Page, label: 'Discussions', icon: MessageSquare, desc: `${data.comments.filter(c => c.project_id === project.id).length} comments`, color: 'text-sky-600 bg-sky-50' },
-  ];
+  ].filter(card => canAccess(card.page));
 
   const activeVendors = vendors.filter(v => v.status === 'active').length;
   const totalVendorValue = vendors.filter(v => v.contract_value).reduce((s, v) => s + v.contract_value!, 0);

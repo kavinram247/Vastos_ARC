@@ -53,26 +53,35 @@ export function AttendancePage() {
     [store.profiles, user?.firm_id],
   );
 
+  // Resolve the crm_profiles.id for the current user by email match.
+  // profiles.id (from auth context) and crm_profiles.id are separate UUID namespaces;
+  // attendance_records must store crm_profiles.id so OwnerRegister can look them up by emp.id.
+  const myCrmId = useMemo(() => {
+    if (!user || !firm) return null;
+    const crm = store.profiles.find((p) => (p as any).email === user.email && p.firm_id === firm.id);
+    return crm?.id ?? user.id; // fallback to user.id for legacy demo profiles (they share the same id)
+  }, [store.profiles, user, firm]);
+
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user || !firm || !myCrmId) return;
     const [mine, recs] = await Promise.all([
-      getTodayRecord(user.id),
-      isOwner ? listAttendance({ from: date, to: date }) : listAttendance({ userId: user.id }),
+      getTodayRecord(myCrmId, firm.id),
+      isOwner ? listAttendance({ from: date, to: date }, firm.id) : listAttendance({ userId: myCrmId }, firm.id),
     ]);
     setMyToday(mine);
     setRecords(recs);
     setLoading(false);
-  }, [user, isOwner, date]);
+  }, [user, firm, myCrmId, isOwner, date]);
 
   useEffect(() => { load().catch((e) => { console.error(e); setLoading(false); }); }, [load]);
 
   const onCheckIn = async () => {
-    if (!user) return;
+    if (!user || !firm || !myCrmId) return;
     setBusy('in');
     try {
       const geo = await captureLocation();
       if (!geo && !confirm('Location is unavailable or was blocked. Check in without location?')) return;
-      await checkIn({ id: user.id, name: user.full_name }, geo, label || null, user.id);
+      await checkIn({ id: myCrmId, name: user.full_name }, geo, label || null, myCrmId, firm.id);
       setLabel('');
       await load();
     } catch (e) { alert('Check-in failed: ' + (e as any).message); } finally { setBusy(null); }
@@ -141,7 +150,7 @@ export function AttendancePage() {
 
       {showModal && isOwner && (
         <ManualModal
-          employees={employees} initial={editing} defaultDate={date} markedBy={user.id}
+          employees={employees} initial={editing} defaultDate={date} markedBy={user.id} firmId={firm.id}
           onClose={() => setShowModal(false)}
           onSaved={async () => { setShowModal(false); await load(); }}
         />
@@ -281,9 +290,9 @@ function recordToInput(r: AttendanceRecord): ManualAttendanceInput {
   };
 }
 
-function ManualModal({ employees, initial, defaultDate, markedBy, onClose, onSaved }: {
+function ManualModal({ employees, initial, defaultDate, markedBy, firmId, onClose, onSaved }: {
   employees: { id: string; full_name: string; role: string }[]; initial: ManualAttendanceInput | null;
-  defaultDate: string; markedBy: string; onClose: () => void; onSaved: () => void;
+  defaultDate: string; markedBy: string; firmId: string; onClose: () => void; onSaved: () => void;
 }) {
   const [userId, setUserId] = useState(initial?.user_id ?? employees[0]?.id ?? '');
   const [workDate, setWorkDate] = useState(initial?.work_date ?? defaultDate);
@@ -303,7 +312,7 @@ function ManualModal({ employees, initial, defaultDate, markedBy, onClose, onSav
         id: initial?.id, user_id: emp.id, user_name: emp.full_name, work_date: workDate, status,
         check_in_at: combine(workDate, inTime), check_out_at: combine(workDate, outTime),
         check_in_label: inLabel || null, notes: notes || null,
-      }, markedBy);
+      }, markedBy, firmId);
       onSaved();
     } catch (e) { alert('Save failed: ' + (e as any).message); } finally { setSaving(false); }
   };

@@ -141,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const resolved = await resolveSession(session.user.id);
         if (resolved) enter(resolved.profile, resolved.firm, resolved.plan);
       } else if (event === 'SIGNED_OUT') {
+        store.reset(); // clear in-memory data so next login re-hydrates from DB
         clear();
       }
     });
