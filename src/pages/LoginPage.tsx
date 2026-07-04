@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { store } from '../data/store';
 import {
-  ArrowRight, Building2, Eye, EyeOff, Loader2, Mail, Lock, ChevronDown,
+  ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, ChevronDown,
 } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 
@@ -16,8 +16,6 @@ export function LoginPage() {
   const [resetSent, setResetSent] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const [mode, setMode] = useState<'login' | 'forgot'>('login');
-
-  const firm = store.firms[0];
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,15 +66,6 @@ export function LoginPage() {
           </p>
         </div>
 
-        <div className="relative flex items-start gap-3 border-t border-white/8 pt-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-indigo-300">
-            <Building2 className="h-[18px] w-[18px]" />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-white/88">{firm?.name ?? 'VASTOS'}</div>
-            <div className="mt-1 max-w-[36ch] text-xs leading-5 text-white/36">{firm?.address ?? ''}</div>
-          </div>
-        </div>
       </section>
 
       {/* ── Right form panel ── */}
