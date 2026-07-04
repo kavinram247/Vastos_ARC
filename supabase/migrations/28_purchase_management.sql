@@ -67,8 +67,12 @@ create table if not exists po_payments (
 create index if not exists po_payments_po_idx   on po_payments(po_id);
 create index if not exists po_payments_firm_idx on po_payments(firm_id);
 
--- ── 4. material_requests (+ items) — site-engineer intake ────
-create table if not exists material_requests (
+-- ── 4. purchase_material_requests (+ items) — site-engineer intake ────
+-- Named with a purchase_ prefix because the Inventory module (built later,
+-- migrations inventory_a.. on this same project) claimed the unprefixed
+-- material_requests / rfqs family for its own, incompatible, ledger-based
+-- schema. Both modules coexist; each owns its own tables.
+create table if not exists purchase_material_requests (
   id                  uuid primary key default gen_random_uuid(),
   firm_id             uuid not null,
   request_number      text not null,
@@ -84,13 +88,13 @@ create table if not exists material_requests (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
-create index if not exists material_requests_firm_idx    on material_requests(firm_id);
-create index if not exists material_requests_project_idx on material_requests(project_id);
+create index if not exists purchase_material_requests_firm_idx    on purchase_material_requests(firm_id);
+create index if not exists purchase_material_requests_project_idx on purchase_material_requests(project_id);
 
-create table if not exists material_request_items (
+create table if not exists purchase_material_request_items (
   id            uuid primary key default gen_random_uuid(),
   firm_id       uuid not null,
-  request_id    uuid not null references material_requests(id) on delete cascade,
+  request_id    uuid not null references purchase_material_requests(id) on delete cascade,
   material_id   uuid,
   material_name text not null default '',
   description   text,
@@ -99,10 +103,10 @@ create table if not exists material_request_items (
   required_by   date,
   order_index   integer not null default 0
 );
-create index if not exists material_request_items_req_idx on material_request_items(request_id);
+create index if not exists purchase_material_request_items_req_idx on purchase_material_request_items(request_id);
 
--- ── 5. rfqs (+ items + vendors contacted) ────────────────────
-create table if not exists rfqs (
+-- ── 5. purchase_rfqs (+ items + vendors contacted) ────────────
+create table if not exists purchase_rfqs (
   id                  uuid primary key default gen_random_uuid(),
   firm_id             uuid not null,
   rfq_number          text not null,
@@ -117,13 +121,13 @@ create table if not exists rfqs (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
-create index if not exists rfqs_firm_idx    on rfqs(firm_id);
-create index if not exists rfqs_project_idx on rfqs(project_id);
+create index if not exists purchase_rfqs_firm_idx    on purchase_rfqs(firm_id);
+create index if not exists purchase_rfqs_project_idx on purchase_rfqs(project_id);
 
-create table if not exists rfq_items (
+create table if not exists purchase_rfq_items (
   id            uuid primary key default gen_random_uuid(),
   firm_id       uuid not null,
-  rfq_id        uuid not null references rfqs(id) on delete cascade,
+  rfq_id        uuid not null references purchase_rfqs(id) on delete cascade,
   material_id   uuid,
   material_name text not null default '',
   quantity      numeric not null default 0,
@@ -131,12 +135,12 @@ create table if not exists rfq_items (
   unit_price    numeric,
   order_index   integer not null default 0
 );
-create index if not exists rfq_items_rfq_idx on rfq_items(rfq_id);
+create index if not exists purchase_rfq_items_rfq_idx on purchase_rfq_items(rfq_id);
 
-create table if not exists rfq_vendors (
+create table if not exists purchase_rfq_vendors (
   id            uuid primary key default gen_random_uuid(),
   firm_id       uuid not null,
-  rfq_id        uuid not null references rfqs(id) on delete cascade,
+  rfq_id        uuid not null references purchase_rfqs(id) on delete cascade,
   vendor_id     uuid,
   vendor_name   text not null default '',
   mobile        text,
@@ -145,7 +149,7 @@ create table if not exists rfq_vendors (
   quoted_amount numeric,
   order_index   integer not null default 0
 );
-create index if not exists rfq_vendors_rfq_idx on rfq_vendors(rfq_id);
+create index if not exists purchase_rfq_vendors_rfq_idx on purchase_rfq_vendors(rfq_id);
 
 -- ── 6. project_stock — per-project inventory ─────────────────
 create table if not exists project_stock (
@@ -194,8 +198,8 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'po_payments','material_requests','material_request_items',
-    'rfqs','rfq_items','rfq_vendors','project_stock','work_orders'
+    'po_payments','purchase_material_requests','purchase_material_request_items',
+    'purchase_rfqs','purchase_rfq_items','purchase_rfq_vendors','project_stock','work_orders'
   ]
   loop
     execute format('alter table %I enable row level security', t);

@@ -21,8 +21,8 @@ async function nextSeq(table: string, firmId: string): Promise<number> {
 // ═══ MATERIAL REQUESTS ═══════════════════════════════════════
 export async function listRequests(firmId: string): Promise<MaterialRequest[]> {
   const [{ data: reqs, error: e1 }, { data: items, error: e2 }] = await Promise.all([
-    sb.from('material_requests').select('*').eq('firm_id', firmId).order('created_at', { ascending: false }),
-    sb.from('material_request_items').select('*').eq('firm_id', firmId).order('order_index'),
+    sb.from('purchase_material_requests').select('*').eq('firm_id', firmId).order('created_at', { ascending: false }),
+    sb.from('purchase_material_request_items').select('*').eq('firm_id', firmId).order('order_index'),
   ]);
   if (e1) throw e1; if (e2) throw e2;
   const byReq = new Map<string, MaterialRequestItem[]>();
@@ -71,29 +71,29 @@ export async function saveRequest(input: RequestInput, firmId: string, userId: s
   };
   let id = input.id;
   if (id) {
-    const { error } = await sb.from('material_requests').update(header).eq('id', id);
+    const { error } = await sb.from('purchase_material_requests').update(header).eq('id', id);
     if (error) throw error;
-    await sb.from('material_request_items').delete().eq('request_id', id);
+    await sb.from('purchase_material_request_items').delete().eq('request_id', id);
   } else {
-    const request_number = formatDocNumber('MR', await nextSeq('material_requests', firmId));
-    const { data, error } = await sb.from('material_requests')
+    const request_number = formatDocNumber('MR', await nextSeq('purchase_material_requests', firmId));
+    const { data, error } = await sb.from('purchase_material_requests')
       .insert({ firm_id: firmId, created_by: userId, request_number, status: 'open', ...header })
       .select('id,request_number').single();
     if (error) throw error;
     id = data.id;
     logPurchaseActivity({ firmId, actorId: userId, action: 'created', label: `Material request ${data.request_number} raised`, entityId: id, entityName: data.request_number });
   }
-  await insertItems('material_request_items', firmId, id!, input.items);
+  await insertItems('purchase_material_request_items', firmId, id!, input.items);
   return id!;
 }
 
 export async function setRequestStatus(id: string, status: MaterialRequest['status']): Promise<void> {
-  const { error } = await sb.from('material_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await sb.from('purchase_material_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteRequest(id: string): Promise<void> {
-  const { error } = await sb.from('material_requests').delete().eq('id', id);
+  const { error } = await sb.from('purchase_material_requests').delete().eq('id', id);
   if (error) throw error;
 }
 
@@ -114,9 +114,9 @@ async function insertItems(table: string, firmId: string, requestId: string, ite
 // ═══ RFQs ════════════════════════════════════════════════════
 export async function listRfqs(firmId: string): Promise<Rfq[]> {
   const [{ data: rfqs, error: e1 }, { data: items, error: e2 }, { data: vends, error: e3 }] = await Promise.all([
-    sb.from('rfqs').select('*').eq('firm_id', firmId).order('created_at', { ascending: false }),
-    sb.from('rfq_items').select('*').eq('firm_id', firmId).order('order_index'),
-    sb.from('rfq_vendors').select('*').eq('firm_id', firmId).order('order_index'),
+    sb.from('purchase_rfqs').select('*').eq('firm_id', firmId).order('created_at', { ascending: false }),
+    sb.from('purchase_rfq_items').select('*').eq('firm_id', firmId).order('order_index'),
+    sb.from('purchase_rfq_vendors').select('*').eq('firm_id', firmId).order('order_index'),
   ]);
   if (e1) throw e1; if (e2) throw e2; if (e3) throw e3;
   const itemsBy = new Map<string, RfqItem[]>();
@@ -163,15 +163,15 @@ export async function saveRfq(input: RfqInput, firmId: string, userId: string): 
   };
   let id = input.id;
   if (id) {
-    const { error } = await sb.from('rfqs').update(header).eq('id', id);
+    const { error } = await sb.from('purchase_rfqs').update(header).eq('id', id);
     if (error) throw error;
     await Promise.all([
-      sb.from('rfq_items').delete().eq('rfq_id', id),
-      sb.from('rfq_vendors').delete().eq('rfq_id', id),
+      sb.from('purchase_rfq_items').delete().eq('rfq_id', id),
+      sb.from('purchase_rfq_vendors').delete().eq('rfq_id', id),
     ]);
   } else {
-    const rfq_number = formatDocNumber('RFQ', await nextSeq('rfqs', firmId));
-    const { data, error } = await sb.from('rfqs')
+    const rfq_number = formatDocNumber('RFQ', await nextSeq('purchase_rfqs', firmId));
+    const { data, error } = await sb.from('purchase_rfqs')
       .insert({ firm_id: firmId, created_by: userId, rfq_number, ...header }).select('id,rfq_number').single();
     if (error) throw error;
     id = data.id;
@@ -181,22 +181,22 @@ export async function saveRfq(input: RfqInput, firmId: string, userId: string): 
     firm_id: firmId, rfq_id: id, material_id: i.material_id, material_name: i.material_name.trim(),
     quantity: i.quantity || 0, uom: i.uom || null, unit_price: i.rate || null, order_index: idx,
   }));
-  if (itemRows.length) { const { error } = await sb.from('rfq_items').insert(itemRows); if (error) throw error; }
+  if (itemRows.length) { const { error } = await sb.from('purchase_rfq_items').insert(itemRows); if (error) throw error; }
   const vendRows = input.vendors.filter(v => v.vendor_name.trim() || v.vendor_id).map((v, idx) => ({
     firm_id: firmId, rfq_id: id, vendor_id: v.vendor_id, vendor_name: v.vendor_name.trim(),
     mobile: v.mobile || null, sent_date: v.sent_date || null, status: v.status, quoted_amount: v.quoted_amount, order_index: idx,
   }));
-  if (vendRows.length) { const { error } = await sb.from('rfq_vendors').insert(vendRows); if (error) throw error; }
+  if (vendRows.length) { const { error } = await sb.from('purchase_rfq_vendors').insert(vendRows); if (error) throw error; }
   return id!;
 }
 
 export async function setRfqStatus(id: string, status: Rfq['status']): Promise<void> {
-  const { error } = await sb.from('rfqs').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await sb.from('purchase_rfqs').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteRfq(id: string): Promise<void> {
-  const { error } = await sb.from('rfqs').delete().eq('id', id);
+  const { error } = await sb.from('purchase_rfqs').delete().eq('id', id);
   if (error) throw error;
 }
 
