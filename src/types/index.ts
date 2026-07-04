@@ -413,4 +413,14 @@ export type Page =
   | 'quotations'
   | 'vendors'
   | 'catalog'
-  | 'calibration';
+  | 'calibration'
+  // Inventory & Procurement
+  | 'inventory'
+  | 'material-requests'
+  | 'rfqs'
+  | 'purchase-orders'
+  | 'goods-receipts'
+  | 'stock'
+  | 'consumption'
+  | 'transfers'
+  | 'materials';

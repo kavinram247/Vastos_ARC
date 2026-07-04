@@ -17,6 +17,7 @@ import {
   TrendingUp, Truck, Phone, Mail, Star, Ban,
   Plus, Edit2, Trash2, MoreVertical, Building2, FileText as FileIcon,
   CheckCircle2, PauseCircle, XCircle, PlayCircle, Settings2, ShieldCheck, Lock, ChevronsUpDown, TrendingUp as TrendingUpIcon, FolderOpen,
+  Package, ClipboardList, Boxes, Flame, ArrowLeftRight,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -107,6 +108,14 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
     { page: 'documents' as Page, label: 'Documents', icon: FileIcon, desc: `${docs.length} file${docs.length !== 1 ? 's' : ''}`, color: 'text-rose-600 bg-rose-50' },
     { page: 'comments' as Page, label: 'Discussions', icon: MessageSquare, desc: `${data.comments.filter(c => c.project_id === project.id).length} comments`, color: 'text-sky-600 bg-sky-50' },
   ].filter(card => canAccess(card.page));
+
+  // Project-level inventory quick actions (gated by module key, not page id).
+  const invCards = [
+    { page: 'material-requests' as Page, module: 'material_requests', label: 'Material Requests', icon: ClipboardList, desc: 'Raise & track demand', color: 'text-indigo-600 bg-indigo-50' },
+    { page: 'stock' as Page, module: 'stock', label: 'Stock & Ledger', icon: Boxes, desc: 'On-hand · movements · counts', color: 'text-teal-600 bg-teal-50' },
+    { page: 'consumption' as Page, module: 'consumption', label: 'Consumption', icon: Flame, desc: 'Log site usage', color: 'text-amber-600 bg-amber-50' },
+    { page: 'transfers' as Page, module: 'transfers', label: 'Transfers', icon: ArrowLeftRight, desc: 'Move stock in / out', color: 'text-purple-600 bg-purple-50' },
+  ].filter(card => canAccess(card.module));
 
   const activeVendors = vendors.filter(v => v.status === 'active').length;
   const totalVendorValue = vendors.filter(v => v.contract_value).reduce((s, v) => s + v.contract_value!, 0);
@@ -322,6 +331,31 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
           );
         })}
       </div>
+
+      {/* Project-level inventory quick actions */}
+      {invCards.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center gap-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500">
+            <Package className="h-3.5 w-3.5" /> Inventory &amp; Procurement
+          </div>
+          <div className="surface-panel grid grid-cols-2 gap-px overflow-hidden bg-slate-100 sm:grid-cols-4">
+            {invCards.map(card => {
+              const Icon = card.icon;
+              return (
+                <button key={card.page} onClick={() => onNavigate(card.page, project.id)} className="group flex min-h-24 items-center gap-3 bg-white p-4 text-left hover:bg-slate-50">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${card.color}`}>
+                    <Icon className="h-[18px] w-[18px]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">{card.label}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500">{card.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Team */}
       <Card>

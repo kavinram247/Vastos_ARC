@@ -33,6 +33,15 @@ import { ClientQuotePage } from './boq/pages/ClientQuotePage';
 import { RolesPermissionsPage } from './pages/RolesPermissionsPage';
 import { MarketingDashboardPage } from './marketing/MarketingDashboardPage';
 import { MarketingConnectPage } from './marketing/MarketingConnectPage';
+import { InventoryOverviewPage } from './inventory/pages/InventoryOverviewPage';
+import { MaterialRequestsPage } from './inventory/pages/MaterialRequestsPage';
+import { RfqsPage } from './inventory/pages/RfqsPage';
+import { PurchaseOrdersPage } from './inventory/pages/PurchaseOrdersPage';
+import { GoodsReceiptsPage } from './inventory/pages/GoodsReceiptsPage';
+import { StockPage } from './inventory/pages/StockPage';
+import { ConsumptionPage } from './inventory/pages/ConsumptionPage';
+import { TransfersPage } from './inventory/pages/TransfersPage';
+import { MaterialsPage } from './inventory/pages/MaterialsPage';
 import { AccessDenied } from './components/AccessDenied';
 import { usePermissions } from './hooks/usePermissions';
 import { MODULE_BY_KEY, pageToModule } from './lib/rbac';
@@ -136,6 +145,24 @@ function AppInner() {
         return <VendorsPage />;
       case 'calibration':
         return <CalibrationPage />;
+      case 'inventory':
+        return <InventoryOverviewPage onNavigate={navigate} />;
+      case 'material-requests':
+        return <MaterialRequestsPage onNavigate={navigate} />;
+      case 'rfqs':
+        return <RfqsPage onNavigate={navigate} />;
+      case 'purchase-orders':
+        return <PurchaseOrdersPage onNavigate={navigate} />;
+      case 'goods-receipts':
+        return <GoodsReceiptsPage />;
+      case 'stock':
+        return <StockPage />;
+      case 'consumption':
+        return <ConsumptionPage />;
+      case 'transfers':
+        return <TransfersPage />;
+      case 'materials':
+        return <MaterialsPage />;
       default:
         return <DashboardPage onNavigate={navigate} />;
     }

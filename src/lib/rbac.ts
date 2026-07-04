@@ -17,6 +17,7 @@ import {
   LayoutDashboard, TrendingUp, FolderKanban, ListChecks, CalendarCheck,
   Calculator, Receipt, Truck, Database, Target, Users, ShieldCheck, Bell, Activity,
   Home, Milestone as MilestoneIcon, Wallet, IndianRupee, FileText, MessageSquare, Camera, BarChart3, Settings,
+  Package, ClipboardList, Send, ShoppingCart, PackageCheck, Boxes, Flame, ArrowLeftRight, Tag,
 } from 'lucide-react';
 import type { Page } from '../types';
 import { store } from '../data/store';
@@ -29,8 +30,8 @@ export const ACTION_LABELS: Record<Action, string> = {
   assign: 'Assign', import: 'Import', export: 'Export', approve: 'Approve',
 };
 
-export type NavGroupName = 'Workspace' | 'Commercial' | 'Admin';
-export const NAV_GROUPS: NavGroupName[] = ['Workspace', 'Commercial', 'Admin'];
+export type NavGroupName = 'Workspace' | 'Commercial' | 'Inventory' | 'Admin';
+export const NAV_GROUPS: NavGroupName[] = ['Workspace', 'Commercial', 'Inventory', 'Admin'];
 
 export interface ModuleDef {
   key: string;
@@ -61,6 +62,19 @@ export const MODULES: ModuleDef[] = [
   { key: 'vendors',       label: 'Vendors',         group: 'Commercial', page: 'vendors',         nav: true,  icon: Truck,           actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'catalog',       label: 'Catalog & Rates', group: 'Commercial', page: 'catalog',         nav: true,  icon: Database,        actions: ['view', 'create', 'edit', 'delete', 'import', 'export'] },
   { key: 'calibration',   label: 'Accuracy',        group: 'Commercial', page: 'calibration',     nav: true,  icon: Target,          actions: ['view', 'edit'] },
+
+  // ── Inventory & Procurement — module keys match the inv_require() checks in the RPCs ──
+  { key: 'inventory',        label: 'Overview',         group: 'Inventory', page: 'inventory',        nav: true,  icon: Package,        actions: ['view', 'edit', 'export'] },
+  { key: 'material_requests',label: 'Material Requests',group: 'Inventory', page: 'material-requests', nav: true,  icon: ClipboardList,  actions: ['view', 'create', 'edit', 'delete', 'approve'] },
+  { key: 'rfqs',             label: 'RFQs & Quotes',    group: 'Inventory', page: 'rfqs',             nav: true,  icon: Send,           actions: ['view', 'create', 'edit', 'approve'] },
+  { key: 'purchasing',       label: 'Purchase Orders',  group: 'Inventory', page: 'purchase-orders',  nav: true,  icon: ShoppingCart,   actions: ['view', 'create', 'edit', 'approve'] },
+  { key: 'goods_receipts',   label: 'Goods Receipts',   group: 'Inventory', page: 'goods-receipts',   nav: true,  icon: PackageCheck,   actions: ['view', 'create', 'approve'] },
+  { key: 'stock',            label: 'Stock & Movements',group: 'Inventory', page: 'stock',            nav: true,  icon: Boxes,          actions: ['view', 'export'] },
+  { key: 'consumption',      label: 'Consumption',      group: 'Inventory', page: 'consumption',      nav: true,  icon: Flame,          actions: ['view', 'create'] },
+  { key: 'transfers',        label: 'Transfers',        group: 'Inventory', page: 'transfers',        nav: true,  icon: ArrowLeftRight, actions: ['view', 'create', 'approve'] },
+  { key: 'materials',        label: 'Materials',        group: 'Inventory', page: 'materials',        nav: true,  icon: Tag,            actions: ['view', 'edit'] },
+  // Non-nav: gates adjustment/count actions inside the Stock page (shows in the Roles matrix).
+  { key: 'stock_adjustments',label: 'Stock Adjustments',group: null,        page: 'stock',            nav: false, icon: Boxes,          actions: ['view', 'create', 'approve'] },
 
   { key: 'leads-admin',   label: 'Leads Admin',     group: 'Admin',       page: 'leads-admin',     nav: true,  icon: Settings,        actions: ['view', 'edit'] },
   { key: 'users',         label: 'Users',           group: 'Admin',       page: 'user-management', nav: true,  icon: Users,           actions: ['view', 'create', 'edit', 'delete', 'assign'] },
