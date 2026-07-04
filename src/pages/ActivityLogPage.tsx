@@ -11,7 +11,7 @@ import type { ActivityLog, AuditModule, AuditAction } from '../types';
 import {
   Activity, Search, Filter, Download, ChevronLeft, ChevronRight,
   ArrowUpDown, Eye, Clock, User, FileText, Milestone, IndianRupee,
-  Camera, MessageSquare, Truck, FolderOpen, Users, Cpu, ShieldCheck, KeyRound, BarChart3,
+  Camera, MessageSquare, Truck, FolderOpen, Users, Cpu, ShieldCheck, KeyRound, BarChart3, ShoppingBag,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -29,6 +29,7 @@ const moduleConfig: Record<AuditModule, { label: string; icon: React.ReactNode; 
   role: { label: 'Role', icon: <ShieldCheck className="w-3.5 h-3.5" />, color: 'text-indigo-600 bg-indigo-50' },
   permission: { label: 'Permission', icon: <KeyRound className="w-3.5 h-3.5" />, color: 'text-violet-600 bg-violet-50' },
   marketing: { label: 'Marketing', icon: <BarChart3 className="w-3.5 h-3.5" />, color: 'text-pink-600 bg-pink-50' },
+  purchase: { label: 'Purchase', icon: <ShoppingBag className="w-3.5 h-3.5" />, color: 'text-indigo-600 bg-indigo-50' },
   system: { label: 'System', icon: <Cpu className="w-3.5 h-3.5" />, color: 'text-gray-500 bg-gray-50' },
 };
 

@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const demoPlan: SubscriptionPlan = {
       id: 'demo', name: 'Enterprise',
       module_keys: ['dashboard','leads','projects','tasks','attendance','client-portal','quotations','boq','catalog','vendors','marketing','telephony','calibration',
-        'inventory','material_requests','rfqs','purchasing','goods_receipts','stock','consumption','transfers','materials','stock_adjustments'],
+        'inventory','material_requests','rfqs','purchasing','goods_receipts','stock','consumption','transfers','materials','stock_adjustments','purchase'],
       max_users: null, max_projects: null, storage_gb: null,
       status: 'active', trial_ends_at: null,
     };

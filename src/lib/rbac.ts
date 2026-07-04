@@ -16,7 +16,7 @@
 import {
   LayoutDashboard, TrendingUp, FolderKanban, ListChecks, CalendarCheck,
   Calculator, Receipt, Truck, Database, Target, Users, ShieldCheck, Bell, Activity,
-  Home, Milestone as MilestoneIcon, Wallet, IndianRupee, FileText, MessageSquare, Camera, BarChart3, Settings,
+  Home, Milestone as MilestoneIcon, Wallet, IndianRupee, FileText, MessageSquare, Camera, BarChart3, Settings, ShoppingBag,
   Package, ClipboardList, Send, ShoppingCart, PackageCheck, Boxes, Flame, ArrowLeftRight, Tag,
 } from 'lucide-react';
 import type { Page } from '../types';
@@ -57,6 +57,7 @@ export const MODULES: ModuleDef[] = [
   { key: 'client-portal', label: 'Overview',        group: 'Workspace',  page: 'client-portal',   nav: true,  icon: Home,            actions: ['view'] },
 
   { key: 'marketing',     label: 'Marketing',       group: 'Commercial', page: 'marketing',       nav: true,  icon: BarChart3,       actions: ['view', 'create', 'edit', 'delete', 'export'] },
+  { key: 'purchase',      label: 'Purchase',        group: 'Commercial', page: 'purchase',        nav: true,  icon: ShoppingBag,     actions: ['view', 'create', 'edit', 'delete', 'approve', 'export'] },
   { key: 'boq',           label: 'BOQ Estimator',   group: 'Commercial', page: 'boq',             nav: true,  icon: Calculator,      actions: ['view', 'create', 'edit', 'delete', 'export', 'approve'] },
   { key: 'quotations',    label: 'Quotations',      group: 'Commercial', page: 'quotations',      nav: true,  icon: Receipt,         actions: ['view', 'create', 'edit', 'delete', 'export', 'approve'] },
   { key: 'vendors',       label: 'Vendors',         group: 'Commercial', page: 'vendors',         nav: true,  icon: Truck,           actions: ['view', 'create', 'edit', 'delete'] },
