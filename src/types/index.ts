@@ -366,7 +366,7 @@ export interface Notification {
   created_at: string;
 }
 
-export type AuditModule = 'project' | 'lead' | 'milestone' | 'payment' | 'cost' | 'site_update' | 'comment' | 'document' | 'vendor' | 'user' | 'system' | 'role' | 'permission' | 'marketing';
+export type AuditModule = 'project' | 'lead' | 'milestone' | 'payment' | 'cost' | 'site_update' | 'comment' | 'document' | 'vendor' | 'user' | 'system' | 'role' | 'permission' | 'marketing' | 'purchase';
 export type AuditAction = 'created' | 'updated' | 'deleted' | 'status_changed' | 'assigned' | 'commented' | 'approved' | 'uploaded' | 'payment_received' | 'exported' | 'login' | 'other';
 
 export interface ActivityLog {
@@ -413,4 +413,5 @@ export type Page =
   | 'quotations'
   | 'vendors'
   | 'catalog'
-  | 'calibration';
+  | 'calibration'
+  | 'purchase';

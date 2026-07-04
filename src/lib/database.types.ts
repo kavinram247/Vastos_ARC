@@ -2922,7 +2922,10 @@ export type Database = {
       firms: {
         Row: {
           address: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
           created_at: string
+          deleted_at: string | null
           gstin: string | null
           id: string
           logo_url: string | null
@@ -2931,7 +2934,10 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          blacklist_reason?: string | null
+          blacklisted_at?: string | null
           created_at?: string
+          deleted_at?: string | null
           gstin?: string | null
           id?: string
           logo_url?: string | null
@@ -2940,7 +2946,10 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          blacklist_reason?: string | null
+          blacklisted_at?: string | null
           created_at?: string
+          deleted_at?: string | null
           gstin?: string | null
           id?: string
           logo_url?: string | null
@@ -3136,6 +3145,104 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      material_request_items: {
+        Row: {
+          description: string | null
+          firm_id: string
+          id: string
+          material_id: string | null
+          material_name: string
+          order_index: number
+          quantity: number
+          request_id: string
+          required_by: string | null
+          uom: string | null
+        }
+        Insert: {
+          description?: string | null
+          firm_id: string
+          id?: string
+          material_id?: string | null
+          material_name?: string
+          order_index?: number
+          quantity?: number
+          request_id: string
+          required_by?: string | null
+          uom?: string | null
+        }
+        Update: {
+          description?: string | null
+          firm_id?: string
+          id?: string
+          material_id?: string | null
+          material_name?: string
+          order_index?: number
+          quantity?: number
+          request_id?: string
+          required_by?: string | null
+          uom?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_request_items_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "material_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      material_requests: {
+        Row: {
+          client_requirements: Json
+          created_at: string
+          created_by: string | null
+          engineer_id: string | null
+          firm_id: string
+          id: string
+          notes: string | null
+          plant_description: string | null
+          project_id: string | null
+          request_date: string
+          request_number: string
+          status: string
+          total_days: number | null
+          updated_at: string
+        }
+        Insert: {
+          client_requirements?: Json
+          created_at?: string
+          created_by?: string | null
+          engineer_id?: string | null
+          firm_id: string
+          id?: string
+          notes?: string | null
+          plant_description?: string | null
+          project_id?: string | null
+          request_date?: string
+          request_number: string
+          status?: string
+          total_days?: number | null
+          updated_at?: string
+        }
+        Update: {
+          client_requirements?: Json
+          created_at?: string
+          created_by?: string | null
+          engineer_id?: string | null
+          firm_id?: string
+          id?: string
+          notes?: string | null
+          plant_description?: string | null
+          project_id?: string | null
+          request_date?: string
+          request_number?: string
+          status?: string
+          total_days?: number | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       module_instances: {
         Row: {
@@ -3546,6 +3653,47 @@ export type Database = {
           },
         ]
       }
+      po_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          firm_id: string
+          id: string
+          payment_date: string
+          payment_mode: string | null
+          po_id: string
+          reference_no: string | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          firm_id: string
+          id?: string
+          payment_date?: string
+          payment_mode?: string | null
+          po_id: string
+          reference_no?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          firm_id?: string
+          id?: string
+          payment_date?: string
+          payment_mode?: string | null
+          po_id?: string
+          reference_no?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "po_payments_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_alternates: {
         Row: {
           alternate_sku: string
@@ -3682,6 +3830,51 @@ export type Database = {
           },
         ]
       }
+      project_stock: {
+        Row: {
+          created_at: string
+          current_stock: number
+          firm_id: string
+          id: string
+          last_po_id: string | null
+          last_updated: string | null
+          material_id: string | null
+          material_name: string
+          project_id: string | null
+          reorder_level: number
+          uom: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_stock?: number
+          firm_id: string
+          id?: string
+          last_po_id?: string | null
+          last_updated?: string | null
+          material_id?: string | null
+          material_name?: string
+          project_id?: string | null
+          reorder_level?: number
+          uom?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_stock?: number
+          firm_id?: string
+          id?: string
+          last_po_id?: string | null
+          last_updated?: string | null
+          material_id?: string | null
+          material_name?: string
+          project_id?: string | null
+          reorder_level?: number
+          uom?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           actual_end_date: string | null
@@ -3763,55 +3956,112 @@ export type Database = {
       }
       purchase_orders: {
         Row: {
+          additional_terms: string | null
+          admin_notes: string | null
+          approval_status: string
           boq_id: string | null
           created_at: string
           created_by: string | null
+          credit_days: number | null
+          delivery_address: string | null
+          delivery_contact_id: string | null
+          delivery_contact_phone: string | null
+          delivery_date: string | null
           firm_id: string
+          freight_charges: number
           gst_amount: number
+          gst_rate: number
+          gst_type: string
           id: string
           issued_at: string | null
+          material_request_id: string | null
+          material_type: string | null
           notes: string | null
+          order_contact_id: string | null
+          order_contact_phone: string | null
+          payment_status: string
           po_number: string
           project_id: string | null
           received_at: string | null
           required_by: string | null
+          rfq_id: string | null
           status: Database["public"]["Enums"]["po_status"]
+          subtotal: number
+          supplier_quotation_ref: string | null
           total_amount: number
           updated_at: string
           vendor_id: string | null
         }
         Insert: {
+          additional_terms?: string | null
+          admin_notes?: string | null
+          approval_status?: string
           boq_id?: string | null
           created_at?: string
           created_by?: string | null
+          credit_days?: number | null
+          delivery_address?: string | null
+          delivery_contact_id?: string | null
+          delivery_contact_phone?: string | null
+          delivery_date?: string | null
           firm_id: string
+          freight_charges?: number
           gst_amount?: number
+          gst_rate?: number
+          gst_type?: string
           id?: string
           issued_at?: string | null
+          material_request_id?: string | null
+          material_type?: string | null
           notes?: string | null
+          order_contact_id?: string | null
+          order_contact_phone?: string | null
+          payment_status?: string
           po_number: string
           project_id?: string | null
           received_at?: string | null
           required_by?: string | null
+          rfq_id?: string | null
           status?: Database["public"]["Enums"]["po_status"]
+          subtotal?: number
+          supplier_quotation_ref?: string | null
           total_amount?: number
           updated_at?: string
           vendor_id?: string | null
         }
         Update: {
+          additional_terms?: string | null
+          admin_notes?: string | null
+          approval_status?: string
           boq_id?: string | null
           created_at?: string
           created_by?: string | null
+          credit_days?: number | null
+          delivery_address?: string | null
+          delivery_contact_id?: string | null
+          delivery_contact_phone?: string | null
+          delivery_date?: string | null
           firm_id?: string
+          freight_charges?: number
           gst_amount?: number
+          gst_rate?: number
+          gst_type?: string
           id?: string
           issued_at?: string | null
+          material_request_id?: string | null
+          material_type?: string | null
           notes?: string | null
+          order_contact_id?: string | null
+          order_contact_phone?: string | null
+          payment_status?: string
           po_number?: string
           project_id?: string | null
           received_at?: string | null
           required_by?: string | null
+          rfq_id?: string | null
           status?: Database["public"]["Enums"]["po_status"]
+          subtotal?: number
+          supplier_quotation_ref?: string | null
           total_amount?: number
           updated_at?: string
           vendor_id?: string | null
@@ -4122,6 +4372,145 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rfq_items: {
+        Row: {
+          firm_id: string
+          id: string
+          material_id: string | null
+          material_name: string
+          order_index: number
+          quantity: number
+          rfq_id: string
+          unit_price: number | null
+          uom: string | null
+        }
+        Insert: {
+          firm_id: string
+          id?: string
+          material_id?: string | null
+          material_name?: string
+          order_index?: number
+          quantity?: number
+          rfq_id: string
+          unit_price?: number | null
+          uom?: string | null
+        }
+        Update: {
+          firm_id?: string
+          id?: string
+          material_id?: string | null
+          material_name?: string
+          order_index?: number
+          quantity?: number
+          rfq_id?: string
+          unit_price?: number | null
+          uom?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rfq_items_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "rfqs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rfq_vendors: {
+        Row: {
+          firm_id: string
+          id: string
+          mobile: string | null
+          order_index: number
+          quoted_amount: number | null
+          rfq_id: string
+          sent_date: string | null
+          status: string
+          vendor_id: string | null
+          vendor_name: string
+        }
+        Insert: {
+          firm_id: string
+          id?: string
+          mobile?: string | null
+          order_index?: number
+          quoted_amount?: number | null
+          rfq_id: string
+          sent_date?: string | null
+          status?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Update: {
+          firm_id?: string
+          id?: string
+          mobile?: string | null
+          order_index?: number
+          quoted_amount?: number | null
+          rfq_id?: string
+          sent_date?: string | null
+          status?: string
+          vendor_id?: string | null
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rfq_vendors_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "rfqs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rfqs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          firm_id: string
+          id: string
+          material_request_id: string | null
+          material_type: string | null
+          notes: string | null
+          project_id: string | null
+          quote_valid_until: string | null
+          rfq_date: string
+          rfq_number: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          firm_id: string
+          id?: string
+          material_request_id?: string | null
+          material_type?: string | null
+          notes?: string | null
+          project_id?: string | null
+          quote_valid_until?: string | null
+          rfq_date?: string
+          rfq_number: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          firm_id?: string
+          id?: string
+          material_request_id?: string | null
+          material_type?: string | null
+          notes?: string | null
+          project_id?: string | null
+          quote_valid_until?: string | null
+          rfq_date?: string
+          rfq_number?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       rooms: {
         Row: {
@@ -4562,6 +4951,33 @@ export type Database = {
           },
         ]
       }
+      vastos_admin_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json
+          firm_id: string | null
+          firm_name: string | null
+          id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json
+          firm_id?: string | null
+          firm_name?: string | null
+          id?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json
+          firm_id?: string | null
+          firm_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       vendor_performance: {
         Row: {
           actual_days: number | null
@@ -4730,6 +5146,7 @@ export type Database = {
           cost_score: number | null
           created_at: string
           created_by: string | null
+          credit_days: number | null
           delivery_score: number | null
           email: string | null
           firm_id: string
@@ -4737,12 +5154,14 @@ export type Database = {
           id: string
           notes: string | null
           overall_score: number | null
+          payment_terms: string | null
           phone: string | null
           quality_score: number | null
           region_ids: string[]
           reliability_score: number | null
           status: Database["public"]["Enums"]["vendor_status"]
           updated_at: string
+          vendor_code: string | null
         }
         Insert: {
           category?: string | null
@@ -4751,6 +5170,7 @@ export type Database = {
           cost_score?: number | null
           created_at?: string
           created_by?: string | null
+          credit_days?: number | null
           delivery_score?: number | null
           email?: string | null
           firm_id: string
@@ -4758,12 +5178,14 @@ export type Database = {
           id?: string
           notes?: string | null
           overall_score?: number | null
+          payment_terms?: string | null
           phone?: string | null
           quality_score?: number | null
           region_ids?: string[]
           reliability_score?: number | null
           status?: Database["public"]["Enums"]["vendor_status"]
           updated_at?: string
+          vendor_code?: string | null
         }
         Update: {
           category?: string | null
@@ -4772,6 +5194,7 @@ export type Database = {
           cost_score?: number | null
           created_at?: string
           created_by?: string | null
+          credit_days?: number | null
           delivery_score?: number | null
           email?: string | null
           firm_id?: string
@@ -4779,12 +5202,14 @@ export type Database = {
           id?: string
           notes?: string | null
           overall_score?: number | null
+          payment_terms?: string | null
           phone?: string | null
           quality_score?: number | null
           region_ids?: string[]
           reliability_score?: number | null
           status?: Database["public"]["Enums"]["vendor_status"]
           updated_at?: string
+          vendor_code?: string | null
         }
         Relationships: [
           {
@@ -4802,6 +5227,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      work_orders: {
+        Row: {
+          additional_work: string | null
+          amount: number | null
+          bank_details: string | null
+          contractor_vendor_id: string | null
+          created_at: string
+          created_by: string | null
+          firm_id: string
+          id: string
+          notes: string | null
+          project_id: string | null
+          status: string
+          terms_conditions: string | null
+          terms_of_payment: string | null
+          title: string
+          updated_at: string
+          wo_date: string
+          wo_number: string
+          work_description: string | null
+        }
+        Insert: {
+          additional_work?: string | null
+          amount?: number | null
+          bank_details?: string | null
+          contractor_vendor_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          firm_id: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          status?: string
+          terms_conditions?: string | null
+          terms_of_payment?: string | null
+          title?: string
+          updated_at?: string
+          wo_date?: string
+          wo_number: string
+          work_description?: string | null
+        }
+        Update: {
+          additional_work?: string | null
+          amount?: number | null
+          bank_details?: string | null
+          contractor_vendor_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          firm_id?: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          status?: string
+          terms_conditions?: string | null
+          terms_of_payment?: string | null
+          title?: string
+          updated_at?: string
+          wo_date?: string
+          wo_number?: string
+          work_description?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Use the Enterprise plan for demo sessions
     const demoPlan: SubscriptionPlan = {
       id: 'demo', name: 'Enterprise',
-      module_keys: ['dashboard','leads','projects','tasks','attendance','client-portal','quotations','boq','catalog','vendors','marketing','telephony','calibration'],
+      module_keys: ['dashboard','leads','projects','tasks','attendance','client-portal','quotations','boq','catalog','vendors','marketing','telephony','calibration','purchase'],
       max_users: null, max_projects: null, storage_gb: null,
       status: 'active', trial_ends_at: null,
     };
