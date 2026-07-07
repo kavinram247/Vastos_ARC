@@ -1,19 +1,22 @@
 // Purchase Orders tab — the unified PO ledger (manual + BOQ-generated + from RFQ).
 import { useMemo, useState } from 'react';
-import { ShoppingCart, Package } from 'lucide-react';
+import { ShoppingCart, Package, Download } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { formatINR, formatDate } from '../utils/format';
+import { useAuth } from '../context/AuthContext';
 import { usePurchase } from './PurchaseManagementPage';
-import { Toolbar, TableCard, Th, Td, RowActions, StatusChip, EmptyState, exportCsv } from './shared';
+import { Toolbar, TableCard, Th, Td, RowActions, IconBtn, StatusChip, EmptyState, exportCsv } from './shared';
 import { PO_STATUS, PO_PAYMENT_STATUS, PO_APPROVAL_STATUS } from './types';
 import { projectName } from './logic';
 import type { PurchaseOrder } from './types';
 import { deletePurchaseOrder } from './poApi';
+import { downloadPoDocx } from './poDocx';
 import { PurchaseOrderForm } from './PurchaseOrderForm';
 
 export function PurchaseOrdersTab() {
   const { pos, vendors, can, reload } = usePurchase();
+  const { firm } = useAuth();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [editing, setEditing] = useState<PurchaseOrder | null>(null);
@@ -86,7 +89,9 @@ export function PurchaseOrdersTab() {
                 <Td><StatusChip map={PO_APPROVAL_STATUS} value={p.approval_status} /></Td>
                 <Td><StatusChip map={PO_STATUS} value={p.status} /></Td>
                 <Td><StatusChip map={PO_PAYMENT_STATUS} value={p.payment_status} /></Td>
-                <Td><RowActions onView={() => setEditing(p)} onEdit={can.edit ? () => setEditing(p) : undefined} onDelete={can.delete ? () => onDelete(p) : undefined} /></Td>
+                <Td><RowActions
+                  extra={firm ? <IconBtn label="Download Word" onClick={() => downloadPoDocx(p, firm, vendors.find(v => v.id === p.vendor_id))}><Download className="h-4 w-4" /></IconBtn> : undefined}
+                  onView={() => setEditing(p)} onEdit={can.edit ? () => setEditing(p) : undefined} onDelete={can.delete ? () => onDelete(p) : undefined} /></Td>
               </tr>
             ))}
           </tbody>

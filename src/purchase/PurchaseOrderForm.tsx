@@ -1,22 +1,25 @@
 // Purchase Order form — Details / Approval / Payments, with the approval,
 // payment-record and receive-into-stock actions wired in.
 import { useMemo, useState } from 'react';
-import { Loader2, Check, Send, ThumbsUp, ThumbsDown, PackageCheck, Plus, IndianRupee } from 'lucide-react';
+import { Loader2, Check, Send, ThumbsUp, ThumbsDown, PackageCheck, Plus, IndianRupee, Download } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { formatINR, formatDate } from '../utils/format';
+import { useAuth } from '../context/AuthContext';
 import { usePurchase } from './PurchaseManagementPage';
 import { LineItemsEditor, ProjectSelect, VendorSelect, StaffSelect, StatusChip } from './shared';
 import { PO_APPROVAL_STATUS, PO_PAYMENT_STATUS, PO_STATUS } from './types';
 import { computePoTotals, blankLine, todayStr } from './logic';
 import type { PurchaseOrder, LineItem } from './types';
 import { savePurchaseOrder, submitForApproval, decidePoApproval, addPayment, receivePurchaseOrder, type PoInput } from './poApi';
+import { downloadPoDocx } from './poDocx';
 
 type Tab = 'details' | 'approval' | 'payments';
 
 export function PurchaseOrderForm({ po, onClose, onSaved }: { po: PurchaseOrder | null; onClose: () => void; onSaved: () => void }) {
   const { vendors, materials, can, firmId, userId } = usePurchase();
+  const { firm } = useAuth();
   const [tab, setTab] = useState<Tab>('details');
   const [saving, setSaving] = useState(false);
   const [acting, setActing] = useState(false);
@@ -181,6 +184,11 @@ export function PurchaseOrderForm({ po, onClose, onSaved }: { po: PurchaseOrder 
         {/* footer actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
           <div className="flex gap-2">
+            {po && firm && (
+              <Button variant="secondary" onClick={() => downloadPoDocx(po, firm, vendors.find(v => v.id === po.vendor_id))}>
+                <Download className="h-4 w-4" /> Download Word
+              </Button>
+            )}
             {po && po.approval_status === 'approved' && po.status !== 'received' && po.status !== 'cancelled' && (
               <Button variant="secondary" onClick={() => runAction(() => receivePurchaseOrder(po, firmId, userId))} disabled={acting}>
                 <PackageCheck className="h-4 w-4" /> Mark received
