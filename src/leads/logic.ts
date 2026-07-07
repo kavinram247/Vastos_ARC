@@ -66,6 +66,14 @@ export function isDueToday(lead: Lead): boolean {
   return lead.next_follow_up === todayStr();
 }
 
+// ── self-assignment / Fresh Enquiries queue ──
+export const isUnassigned = (lead: Lead): boolean => !lead.assigned_to;
+/** Fresh Enquiries = no owner yet and still an open (non-closed) lead. */
+export function isFresh(lead: Lead, firmId: string): boolean {
+  return isUnassigned(lead) && !isClosedKey(firmId, lead.status);
+}
+export const isOwnedBy = (lead: Lead, userId: string): boolean => lead.assigned_to === userId;
+
 // ── returning-customer recognition (§5.3) ──
 export interface ReturningMatch { contact: Contact; priorLeads: Lead[]; }
 export function matchReturningCustomer(firmId: string, email?: string | null, phone?: string | null): ReturningMatch | null {
@@ -111,10 +119,13 @@ export function setLeadStage(leadId: string, firmId: string, newKey: string, act
   if (isClosedKey(firmId, newKey) && !isClosedKey(firmId, lead.status)) {
     patch.prev_status = lead.status as Lead['status'];
   }
+  const fromLabel = stageByKey(firmId, lead.status)?.label || lead.status;
   store.updateLead(leadId, patch);
   const st = stageByKey(firmId, newKey);
   if (st?.is_won) {
     emitEvent({ type: 'lead_won', firmId, actorId, title: `Lead marked Won — ${lead.client_name}`, message: `${lead.project_type || 'Project'} ready to convert`, module: 'lead', action: 'status_changed', entityType: 'lead', entityId: leadId, entityName: lead.client_name, link: linkTo('leads') });
+  } else {
+    emitEvent({ type: 'lead_status_changed', firmId, actorId, title: `Stage changed — ${lead.client_name}`, message: `${fromLabel} → ${st?.label || newKey}`, module: 'lead', action: 'status_changed', entityType: 'lead', entityId: leadId, entityName: lead.client_name, link: linkTo('leads') });
   }
 }
 export function restoreLead(leadId: string) {

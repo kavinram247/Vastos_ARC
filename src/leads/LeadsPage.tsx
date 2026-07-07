@@ -8,18 +8,20 @@ import { formatINRCompact } from '../utils/format';
 import type { Page, Lead } from '../types';
 import {
   getStages, leadKpis, stageByKey, stageColor,
-  isOverdue, isDueToday,
+  isOverdue, isDueToday, isFresh,
 } from './logic';
 import { AddLeadModal } from './AddLeadModal';
 import { LeadDetailModal } from './LeadDetailModal';
+import { LeadsDashboard } from './dashboard/LeadsDashboard';
+import { emitLeadEvent } from '../lib/events';
 import {
   TrendingUp, Search, UserPlus, AlertTriangle, Clock, Sparkles,
-  IndianRupee, Ruler, Lock, ArrowUpDown,
+  IndianRupee, Ruler, Lock, ArrowUpDown, Inbox, UserCheck,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 interface Props { onNavigate?: (page: Page, projectId?: string) => void; }
-type Tab = 'actions' | 'pipeline' | 'all';
+type Tab = 'dashboard' | 'fresh' | 'mine' | 'actions' | 'pipeline' | 'all';
 
 export function LeadsPage({ onNavigate }: Props) {
   const { user, firm } = useAuth();
@@ -27,7 +29,7 @@ export function LeadsPage({ onNavigate }: Props) {
   const { can, canAccess } = usePermissions();
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
-  const [tab, setTab] = useState<Tab>('actions');
+  const [tab, setTab] = useState<Tab>('dashboard');
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [sort, setSort] = useState<'recent' | 'value' | 'name'>('recent');
@@ -63,6 +65,13 @@ export function LeadsPage({ onNavigate }: Props) {
   const dueToday = filtered.filter(l => isDueToday(l) && !isOverdue(l, firmId) && stageByKey(firmId, l.status)?.category !== 'terminal');
   const fresh = filtered.filter(l => l.status === 'new');
 
+  // self-assignment segments + permissions
+  const canClaim = can('leads', 'edit');
+  const canAssign = can('leads', 'assign');
+  const freshQueue = filtered.filter(l => isFresh(l, firmId));
+  const myLeads = filtered.filter(l => l.assigned_to === user.id);
+  const showFreshTab = canClaim || canAssign;
+
   const sortLeads = (list: Lead[]) => [...list].sort((a, b) => {
     if (sort === 'value') return (b.estimated_budget || 0) - (a.estimated_budget || 0);
     if (sort === 'name') return a.client_name.localeCompare(b.client_name);
@@ -85,34 +94,62 @@ export function LeadsPage({ onNavigate }: Props) {
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi label="Total leads" value={String(kpis.total)} />
-        <Kpi label="Active pipeline" value={String(kpis.active)} accent="indigo" />
-        <Kpi label="Value at stake" value={formatINRCompact(kpis.value)} accent="emerald" />
-        <Kpi label="Conversion rate" value={`${kpis.conversionRate}%`} accent="indigo" sub={`${kpis.won} won`} />
+      {/* Tabs */}
+      <div className="flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {([
+          { key: 'dashboard' as const, label: 'Dashboard' },
+          ...(showFreshTab ? [{ key: 'fresh' as const, label: 'Fresh Enquiries', badge: freshQueue.length }] : []),
+          { key: 'mine' as const, label: 'My Leads', badge: myLeads.length },
+          { key: 'actions' as const, label: 'Priority Actions', badge: missed.length + dueToday.length + fresh.length },
+          { key: 'pipeline' as const, label: 'Pipeline' },
+          { key: 'all' as const, label: 'All Leads', badge: filtered.length },
+        ]).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={cn('shrink-0 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all', tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
+            {t.label}{(t as any).badge !== undefined && <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">{(t as any).badge}</span>}
+          </button>
+        ))}
       </div>
 
-      {/* Search + tabs */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, project, contact, tags…"
-            className="h-10 w-full rounded-[10px] border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-indigo-600 focus:outline-none focus:ring-3 focus:ring-indigo-600/12" />
+      {/* TAB: Dashboard */}
+      {tab === 'dashboard' && <LeadsDashboard />}
+
+      {/* KPI strip + search — for the list tabs only (the Dashboard tab has its own KPIs) */}
+      {tab !== 'dashboard' && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi label="Total leads" value={String(kpis.total)} />
+            <Kpi label="Active pipeline" value={String(kpis.active)} accent="indigo" />
+            <Kpi label="Value at stake" value={formatINRCompact(kpis.value)} accent="emerald" />
+            <Kpi label="Conversion rate" value={`${kpis.conversionRate}%`} accent="indigo" sub={`${kpis.won} won`} />
+          </div>
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, project, contact, tags…"
+              className="h-10 w-full rounded-[10px] border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-indigo-600 focus:outline-none focus:ring-3 focus:ring-indigo-600/12" />
+          </div>
+        </>
+      )}
+
+      {/* TAB: Fresh Enquiries */}
+      {tab === 'fresh' && (
+        <FreshQueue leads={sortLeads(freshQueue)} firmId={firmId} userId={user.id} canClaim={canClaim} canAssign={canAssign}
+          team={store.profiles.filter(p => p.firm_id === firmId && p.role !== 'client')} profile={profile} onOpen={setSelected} />
+      )}
+
+      {/* TAB: My Leads */}
+      {tab === 'mine' && (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400">{myLeads.length} lead{myLeads.length === 1 ? '' : 's'} assigned to you</p>
+          {myLeads.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400">No leads assigned to you yet — claim one from Fresh Enquiries.</div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {sortLeads(myLeads).map(l => <LeadCard key={l.id} lead={l} firmId={firmId} owner={profile(l.assigned_to)} onClick={() => setSelected(l.id)} />)}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 w-fit">
-          {([
-            { key: 'actions' as const, label: 'Priority Actions', badge: missed.length + dueToday.length + fresh.length },
-            { key: 'pipeline' as const, label: 'Pipeline' },
-            { key: 'all' as const, label: 'All Leads', badge: filtered.length },
-          ]).map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={cn('rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all', tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
-              {t.label}{t.badge !== undefined && <span className="ml-1.5 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">{t.badge}</span>}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* TAB: Priority Actions */}
       {tab === 'actions' && (
@@ -206,6 +243,79 @@ function ActionGroup({ title, sub, tone, icon, leads, empty, firmId, profile, on
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {leads.map(l => <LeadCard key={l.id} lead={l} firmId={firmId} owner={profile(l.assigned_to)} onClick={() => onOpen(l.id)} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FreshQueue({ leads, firmId, userId, canClaim, canAssign, team, profile, onOpen }: {
+  leads: Lead[]; firmId: string; userId: string; canClaim: boolean; canAssign: boolean;
+  team: any[]; profile: (id?: string) => any; onOpen: (id: string) => void;
+}) {
+  const store = useStore();
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [claiming, setClaiming] = useState<string | null>(null);
+
+  const toggle = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allSelected = leads.length > 0 && leads.every(l => sel.has(l.id));
+  const claim = async (id: string) => {
+    setClaiming(id);
+    const r = await store.claimLead(id, userId);
+    setClaiming(null);
+    if (!r.ok) alert(r.reason === 'taken' ? 'This lead has already been assigned to another agent.' : 'Could not claim this lead — please try again.');
+  };
+  const bulkAssign = (ownerId: string | null) => {
+    const ids = [...sel];
+    store.bulkAssignLeads(ids, ownerId);
+    if (ownerId) ids.forEach(id => { const l = store.leads.find(x => x.id === id); if (l) emitLeadEvent({ type: 'lead_assigned', firmId, actorId: userId, leadId: id, leadName: l.client_name, title: `Lead assigned — ${l.client_name}`, newOwnerId: ownerId }); });
+    setSel(new Set());
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700"><Inbox className="h-4 w-4" /></div>
+        <div>
+          <h2 className="text-sm font-bold text-slate-800">Fresh Enquiries</h2>
+          <p className="text-[11px] text-slate-400">{leads.length} unassigned {leads.length === 1 ? 'lead' : 'leads'} waiting to be claimed</p>
+        </div>
+      </div>
+
+      {/* Manager bulk bar */}
+      {canAssign && leads.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
+          <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+            <input type="checkbox" checked={allSelected} onChange={() => setSel(allSelected ? new Set() : new Set(leads.map(l => l.id)))} /> Select all
+          </label>
+          <span className="text-xs text-slate-400">{sel.size} selected</span>
+          <div className="ml-auto flex items-center gap-2">
+            <select disabled={sel.size === 0} defaultValue="" onChange={e => { if (e.target.value) { bulkAssign(e.target.value); e.target.value = ''; } }}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 disabled:opacity-40 focus:border-indigo-500 focus:outline-none">
+              <option value="">Assign selected to…</option>
+              {team.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {leads.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400">No fresh enquiries — every lead has an owner. 🎉</div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {leads.map(l => (
+            <div key={l.id} className={cn('rounded-xl border bg-white p-1 transition-all', sel.has(l.id) ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-transparent')}>
+              <LeadCard lead={l} firmId={firmId} owner={profile(l.assigned_to)} onClick={() => onOpen(l.id)} />
+              <div className="flex items-center gap-2 px-2 py-2">
+                {canAssign && <input type="checkbox" checked={sel.has(l.id)} onChange={() => toggle(l.id)} aria-label="Select lead" />}
+                {canClaim && (
+                  <Button size="sm" className="ml-auto" onClick={() => claim(l.id)} disabled={claiming === l.id}>
+                    <UserCheck className="h-3.5 w-3.5" /> {claiming === l.id ? 'Claiming…' : 'Assign to me'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

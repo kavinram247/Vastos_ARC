@@ -7,6 +7,7 @@ import type {
   Contact, PipelineStage, FeatureFlag, CommChannel,
   Role, RolePermission, RoleScope
 } from '../types';
+import type { DashboardLayout } from '../leads/dashboard/types';
 import { firms as initialFirms } from './mockData';
 import { DEMO_FIRM_ID } from '../lib/supabase';
 import * as crm from '../lib/crmApi';
@@ -47,6 +48,7 @@ class DataStore {
   commChannels: CommChannel[] = [];
   roles: Role[] = [];
   rolePermissions: RolePermission[] = [];
+  dashboardLayouts: DashboardLayout[] = [];
 
   loaded = false;
   private hydrating: Promise<void> | null = null;
@@ -88,6 +90,7 @@ class DataStore {
     this.pipelineStages = [];
     this.featureFlags = [];
     this.commChannels = [];
+    this.dashboardLayouts = [];
     this.notify();
   }
 
@@ -119,6 +122,7 @@ class DataStore {
       this.commChannels = d.commChannels as CommChannel[];
       this.roles = d.roles as Role[];
       this.rolePermissions = d.rolePermissions as RolePermission[];
+      this.dashboardLayouts = d.dashboardLayouts as DashboardLayout[];
       this.loaded = true;
       this.notify();
     });
@@ -399,6 +403,60 @@ class DataStore {
       this.notify();
       crm.persistUpdate('leads', id, patch);
     }
+  }
+
+  // ─── SELF-ASSIGNMENT ───
+  /**
+   * Atomically claim an unassigned lead. Guards on assigned_to IS NULL in the
+   * DB so two agents racing can never both win. Returns { ok:true } for the
+   * winner; { ok:false, reason:'taken' } for the loser (local row reconciled to
+   * the true owner). Optimistically flips the local row so the caller's UI
+   * updates instantly, then rolls back if the write reveals it was taken.
+   */
+  async claimLead(id: string, userId: string): Promise<{ ok: boolean; reason?: 'taken' | 'error' }> {
+    const idx = this.leads.findIndex(l => l.id === id);
+    if (idx < 0) return { ok: false, reason: 'error' };
+    if (this.leads[idx].assigned_to) return { ok: false, reason: 'taken' };
+    const now = nowISO();
+    const prev = this.leads[idx];
+    // optimistic
+    this.leads[idx] = { ...prev, assigned_to: userId, updated_at: now };
+    this.notify();
+    try {
+      const won = await crm.claimLeadRow(id, userId, now);
+      if (won) return { ok: true };
+      // lost the race — reconcile to the DB's truth (the actual winner)
+      const fresh = await crm.fetchLeadRow(id);
+      const j = this.leads.findIndex(l => l.id === id);
+      if (j >= 0 && fresh) { this.leads[j] = fresh as Lead; this.notify(); }
+      return { ok: false, reason: 'taken' };
+    } catch {
+      // transport error — roll back the optimistic flip
+      const j = this.leads.findIndex(l => l.id === id);
+      if (j >= 0) { this.leads[j] = prev; this.notify(); }
+      return { ok: false, reason: 'error' };
+    }
+  }
+
+  /** Manager override — assign a lead to an agent (or null to unassign). */
+  assignLead(id: string, userId: string | null) {
+    const idx = this.leads.findIndex(l => l.id === id);
+    if (idx < 0) return;
+    // persist an explicit null on unassign (supabase-js drops `undefined` keys)
+    const patch = { assigned_to: userId ?? null, updated_at: nowISO() };
+    this.leads[idx] = { ...this.leads[idx], assigned_to: userId ?? undefined, updated_at: patch.updated_at };
+    this.notify();
+    crm.persistUpdate('leads', id, patch);
+  }
+
+  /** Manager override — remove ownership (back to the Fresh Enquiries queue). */
+  unassignLead(id: string) {
+    this.assignLead(id, null);
+  }
+
+  /** Manager override — bulk (re)assign / unassign. */
+  bulkAssignLeads(ids: string[], userId: string | null) {
+    ids.forEach(id => this.assignLead(id, userId));
   }
 
   deleteLead(id: string) {
@@ -688,6 +746,42 @@ class DataStore {
       this.notify();
       crm.persistUpdate('profiles', userId, { role_id: roleId });
     }
+  }
+
+  // ─── DASHBOARD LAYOUTS (per-user customizable dashboards) ───
+  addDashboardLayout(layout: Omit<DashboardLayout, 'id' | 'created_at' | 'updated_at'>): DashboardLayout {
+    const now = nowISO();
+    const row: DashboardLayout = { ...layout, id: uuid(), created_at: now, updated_at: now };
+    this.dashboardLayouts.push(row);
+    this.notify();
+    crm.persistInsert('dashboardLayouts', row);
+    return row;
+  }
+
+  updateDashboardLayout(id: string, updates: Partial<DashboardLayout>) {
+    const idx = this.dashboardLayouts.findIndex(l => l.id === id);
+    if (idx >= 0) {
+      const patch = { ...updates, updated_at: nowISO() };
+      this.dashboardLayouts[idx] = { ...this.dashboardLayouts[idx], ...patch };
+      this.notify();
+      crm.persistUpdate('dashboardLayouts', id, patch);
+    }
+  }
+
+  /** Make one layout the user's default (clears the flag on their other layouts of the same module). */
+  setDefaultDashboardLayout(id: string, userId: string, module: string) {
+    this.dashboardLayouts.forEach(l => {
+      if (l.user_id === userId && l.module === module && l.is_default && l.id !== id) {
+        this.updateDashboardLayout(l.id, { is_default: false });
+      }
+    });
+    this.updateDashboardLayout(id, { is_default: true });
+  }
+
+  deleteDashboardLayout(id: string) {
+    this.dashboardLayouts = this.dashboardLayouts.filter(l => l.id !== id);
+    this.notify();
+    crm.persistDelete('dashboardLayouts', id);
   }
 }
 

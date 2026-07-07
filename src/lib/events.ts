@@ -8,13 +8,15 @@ import { store } from '../data/store';
 import type { Page } from '../types';
 
 export type EventType =
-  | 'lead_won' | 'project_created'
+  | 'lead_won' | 'lead_created' | 'lead_assigned' | 'lead_status_changed'
+  | 'project_created'
   | 'milestone_completed' | 'milestone_delayed'
   | 'payment_due' | 'payment_received'
   | 'site_update_posted' | 'document_shared' | 'comment_posted';
 
 const NOTIF_TYPE: Record<EventType, 'info' | 'success' | 'warning' | 'error'> = {
-  lead_won: 'success', project_created: 'success', milestone_completed: 'success',
+  lead_won: 'success', lead_created: 'info', lead_assigned: 'info', lead_status_changed: 'info',
+  project_created: 'success', milestone_completed: 'success',
   milestone_delayed: 'warning', payment_due: 'warning', payment_received: 'success',
   site_update_posted: 'info', document_shared: 'info', comment_posted: 'info',
 };
@@ -32,6 +34,7 @@ export interface EmitArgs {
   entityType?: string;
   entityId?: string;
   entityName?: string;
+  targetUserIds?: string[];   // explicit extra recipients (e.g. a lead's new owner)
 }
 
 /** Serialize a deep link for a notification. */
@@ -45,7 +48,7 @@ export function parseLink(link?: string | null): { page: Page; projectId?: strin
 }
 
 /** Who should be notified for an event (deduped, actor excluded). */
-function recipients(type: EventType, firmId: string, projectId: string | undefined, actorId: string): string[] {
+function recipients(type: EventType, firmId: string, projectId: string | undefined, actorId: string, targetUserIds: string[] = []): string[] {
   const d = store.forFirm(firmId);
   const owners = store.adminUserIds(firmId);
   const project = projectId ? d.projects.find(p => p.id === projectId) : undefined;
@@ -55,7 +58,10 @@ function recipients(type: EventType, firmId: string, projectId: string | undefin
   let set: string[];
   switch (type) {
     case 'lead_won':
+    case 'lead_created':
+    case 'lead_status_changed':
     case 'project_created': set = owners; break;
+    case 'lead_assigned': set = [...owners, ...targetUserIds]; break;
     case 'milestone_completed': set = [...client, ...team]; break;
     case 'milestone_delayed': set = [...owners, ...client]; break;
     case 'payment_due': set = client; break;
@@ -81,7 +87,7 @@ export function emitEvent(args: EmitArgs) {
     entity_name: args.entityName,
     details: args.message || args.title,
   });
-  for (const uid of recipients(args.type, args.firmId, args.projectId, args.actorId)) {
+  for (const uid of recipients(args.type, args.firmId, args.projectId, args.actorId, args.targetUserIds)) {
     store.addNotification({
       firm_id: args.firmId,
       user_id: uid,
@@ -92,6 +98,35 @@ export function emitEvent(args: EmitArgs) {
       link: args.link,
     });
   }
+}
+
+/** Convenience wrapper for lead lifecycle events (create / assign) — logs to the
+ *  activity timeline and fans out notifications. Status changes are emitted from
+ *  setLeadStage() in the leads logic. */
+export function emitLeadEvent(args: {
+  type: 'lead_created' | 'lead_assigned';
+  firmId: string;
+  actorId: string;
+  leadId: string;
+  leadName: string;
+  title: string;
+  message?: string;
+  newOwnerId?: string | null;   // for lead_assigned — notify the new owner
+}) {
+  emitEvent({
+    type: args.type,
+    firmId: args.firmId,
+    actorId: args.actorId,
+    title: args.title,
+    message: args.message,
+    module: 'lead',
+    action: args.type === 'lead_assigned' ? 'assigned' : 'created',
+    entityType: 'lead',
+    entityId: args.leadId,
+    entityName: args.leadName,
+    link: linkTo('leads'),
+    targetUserIds: args.newOwnerId ? [args.newOwnerId] : undefined,
+  });
 }
 
 /** Audit-log a role / permission / user-management change (no notification fan-out). */

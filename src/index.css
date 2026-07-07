@@ -327,6 +327,27 @@ main tbody tr {
   }
 }
 
+/* ── Customizable leads dashboard — scoped dark mode ──
+   Only the widgets inside a .dash-dark container invert; the rest of the app is
+   unaffected. Overrides the (green-remapped) slate text/surfaces so the
+   hand-built widgets stay readable without per-widget dark variants. */
+.dash-dark { background: #0d1311; color: #e2e8f0; }
+.dash-dark .dash-widget { background: #17201d; border-color: #25302c; }
+.dash-dark .text-slate-900 { color: #f1f5f9 !important; }
+.dash-dark .text-slate-800 { color: #e2e8f0 !important; }
+.dash-dark .text-slate-700 { color: #cbd5e1 !important; }
+.dash-dark .text-slate-600 { color: #aeb9c2 !important; }
+.dash-dark .text-slate-500 { color: #94a3a0 !important; }
+.dash-dark .text-slate-400,
+.dash-dark .text-slate-300 { color: #7d8983 !important; }
+.dash-dark .border-slate-100,
+.dash-dark .border-slate-200 { border-color: #25302c !important; }
+.dash-dark .bg-white { background-color: #17201d !important; }
+.dash-dark .bg-slate-50,
+.dash-dark .bg-slate-100 { background-color: #1b2521 !important; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

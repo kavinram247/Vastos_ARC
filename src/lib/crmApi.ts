@@ -33,6 +33,7 @@ export const TABLES = {
   commChannels: 'crm_comm_channels',
   roles: 'crm_roles',
   rolePermissions: 'crm_role_permissions',
+  dashboardLayouts: 'crm_dashboard_layouts',
 } as const;
 export type StoreKey = keyof typeof TABLES;
 
@@ -94,4 +95,27 @@ export function persistDeleteWhere(key: StoreKey, match: Record<string, any>) {
   let q = sb.from(TABLES[key]).delete();
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
   q.then(({ error }: any) => { if (error) console.error(`deleteWhere ${TABLES[key]}`, error.message); });
+}
+
+// ── atomic lead claim (self-assignment) ──
+// Guards on assigned_to IS NULL so two agents racing to claim the same lead can
+// never both win: Postgres evaluates the predicate atomically, so exactly one
+// UPDATE matches. Returns the winning row on success, null when already taken,
+// or throws on a transport error. `null` lets the caller fetch the true owner.
+export async function claimLeadRow(leadId: string, userId: string, updatedAt: string): Promise<any | null> {
+  const { data, error } = await sb
+    .from(TABLES.leads)
+    .update({ assigned_to: userId, updated_at: updatedAt })
+    .eq('id', leadId)
+    .is('assigned_to', null)
+    .select();
+  if (error) throw new Error(error.message);
+  return data && data.length > 0 ? data[0] : null;
+}
+
+/** Read a single lead row back from the DB (used to reconcile after a lost claim race). */
+export async function fetchLeadRow(leadId: string): Promise<any | null> {
+  const { data, error } = await sb.from(TABLES.leads).select('*').eq('id', leadId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? coerce([data])[0] : null;
 }

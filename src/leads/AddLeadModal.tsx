@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { formatINRCompact, timeAgo } from '../utils/format';
 import type { LeadSource, LeadPriority } from '../types';
 import { activeStages, matchReturningCustomer, ensureContact, stageByKey } from './logic';
+import { emitLeadEvent } from '../lib/events';
 import { History, Plus } from 'lucide-react';
 
 interface Props {
@@ -33,7 +34,7 @@ export function AddLeadModal({ firmId, userId, onClose, onCreated }: Props) {
     client_name: '', client_company: '', client_email: '', client_phone: '',
     project_type: '', project_location: '', estimated_budget: '', estimated_area: '',
     project_requirements: '', source: 'referral' as LeadSource, priority: 'medium' as LeadPriority,
-    assigned_to: userId, status: stages[0]?.key || 'new', tags: '',
+    assigned_to: '', status: stages[0]?.key || 'new', tags: '',
   });
   const set = (patch: Partial<typeof f>) => setF(s => ({ ...s, ...patch }));
 
@@ -60,6 +61,14 @@ export function AddLeadModal({ firmId, userId, onClose, onCreated }: Props) {
       tags: f.tags ? f.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
       contact_id: contactId, created_by: userId,
     } as any);
+    emitLeadEvent({
+      type: 'lead_created', firmId, actorId: userId, leadId: lead.id, leadName: lead.client_name,
+      title: `New lead — ${lead.client_name}`,
+      message: `${lead.project_type}${f.assigned_to ? '' : ' · unassigned (Fresh Enquiries)'}`,
+    });
+    if (f.assigned_to) {
+      emitLeadEvent({ type: 'lead_assigned', firmId, actorId: userId, leadId: lead.id, leadName: lead.client_name, title: `Lead assigned — ${lead.client_name}`, newOwnerId: f.assigned_to });
+    }
     onCreated(lead.id);
   };
 

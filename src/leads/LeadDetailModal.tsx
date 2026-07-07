@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useStore } from '../hooks/useStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Avatar } from '../components/ui/Avatar';
 import { Select, Textarea } from '../components/ui/Input';
 import { formatINR, formatDate, timeAgo } from '../utils/format';
+import { emitLeadEvent } from '../lib/events';
 import type { Page, InteractionChannel, LostReasonCategory } from '../types';
 import {
   activeStages, terminalStages, stageByKey, stageColor, isClosedStage,
@@ -16,7 +19,7 @@ import { placeCall, getTelephony } from './telephony';
 import {
   Phone, Mail, MessageSquare, MessageCircle, Users, Share2, FileText, Building2,
   CheckCircle2, CalendarClock, PhoneCall, FolderPlus, ArrowRight, RotateCcw, History,
-  Plus, X, Undo2, AlertTriangle,
+  Plus, X, Undo2, AlertTriangle, UserPlus, UserCog, UserX,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -174,6 +177,9 @@ export function LeadDetailModal({ leadId, firmId, userId, onClose, onNavigate }:
           <Button size="sm" onClick={schedule} disabled={!sched}>Schedule</Button>
         </div>
 
+        {/* Owner / assignment */}
+        <OwnerBar leadId={leadId} firmId={firmId} userId={userId} />
+
         {/* Tabs */}
         <div className="flex border-b border-slate-200 px-6">
           {([['overview', 'Overview'], ['timeline', `Timeline${interactions.length ? ` · ${interactions.length}` : ''}`], ['quotations', `Quotations${quotations.length ? ` · ${quotations.length}` : ''}`]] as const).map(([k, label]) => (
@@ -320,6 +326,60 @@ function Timeline({ leadId, firmId, userId, contactId, interactions }: { leadId:
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function OwnerBar({ leadId, firmId, userId }: { leadId: string; firmId: string; userId: string }) {
+  const store = useStore();
+  const { can } = usePermissions();
+  const [claiming, setClaiming] = useState(false);
+  const lead = store.leads.find(l => l.id === leadId);
+  if (!lead) return null;
+  const owner = lead.assigned_to ? store.profiles.find(p => p.id === lead.assigned_to) : null;
+  const team = store.profiles.filter(p => p.firm_id === firmId && p.role !== 'client');
+  const canClaim = can('leads', 'edit');
+  const canAssign = can('leads', 'assign');
+  const isMine = lead.assigned_to === userId;
+
+  const claim = async () => {
+    setClaiming(true);
+    const r = await store.claimLead(leadId, userId);
+    setClaiming(false);
+    if (!r.ok) alert(r.reason === 'taken' ? 'This lead has already been assigned to another agent.' : 'Could not claim this lead — please try again.');
+  };
+  const assignTo = (id: string) => {
+    if (!id) { store.unassignLead(leadId); return; }
+    store.assignLead(leadId, id);
+    if (id !== userId) emitLeadEvent({ type: 'lead_assigned', firmId, actorId: userId, leadId, leadName: lead.client_name, title: `Lead assigned — ${lead.client_name}`, newOwnerId: id });
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-6 py-2.5">
+      <UserCog className="h-4 w-4 text-slate-400" />
+      <span className="text-xs font-semibold text-slate-700">Owner</span>
+      {owner ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+          <Avatar name={owner.full_name} size="sm" /> {owner.full_name}{isMine && <span className="text-[10px] text-indigo-500">· you</span>}
+        </span>
+      ) : (
+        <Badge variant="warning" size="sm">Unassigned</Badge>
+      )}
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {!lead.assigned_to && canClaim && (
+          <Button size="sm" onClick={claim} disabled={claiming}><UserPlus className="h-3.5 w-3.5" /> {claiming ? 'Claiming…' : 'Assign to me'}</Button>
+        )}
+        {canAssign && (
+          <select value={lead.assigned_to || ''} onChange={e => assignTo(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 focus:border-indigo-500 focus:outline-none">
+            <option value="">Unassigned</option>
+            {team.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select>
+        )}
+        {canAssign && lead.assigned_to && (
+          <button onClick={() => store.unassignLead(leadId)} className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-600"><UserX className="h-3.5 w-3.5" /> Remove</button>
+        )}
+      </div>
     </div>
   );
 }
