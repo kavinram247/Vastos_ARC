@@ -7,7 +7,8 @@ import { Modal } from '../../components/ui/Modal';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { formatINR, formatDate } from '../../utils/format';
 import type { Page } from '../../types';
-import { Plus, Trash2, Send, Check, X, PackageCheck, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Send, Check, X, PackageCheck, RotateCcw, Download } from 'lucide-react';
+import { downloadPoDocx, type PoDocData } from '../../purchase/poDocx';
 import { InvHeader, StatusBadge, AsyncState, EmptyState, AccessNotice, ActionBanner } from '../ui';
 import { takePendingOpen, setPendingOpen } from '../nav';
 import {
@@ -21,7 +22,7 @@ const blankRow = (): Row => ({ sku_id: '', description: '', uom: '', quantity: '
 const money = (n: number) => Math.round(n * 100) / 100;
 
 export function PurchaseOrdersPage({ onNavigate }: { onNavigate: (p: Page, projectId?: string) => void }) {
-  const { firm } = useAuth();
+  const { firm, user } = useAuth();
   const { can, canAccess } = usePermissions();
   const store = useStore();
   const firmId = firm?.id;
@@ -104,6 +105,40 @@ export function PurchaseOrdersPage({ onNavigate }: { onNavigate: (p: Page, proje
     setBusy(true);
     try { await fn(); setDetail(null); setBanner({ kind: 'success', message: ok }); await load(); }
     catch (e: any) { setBanner({ kind: 'error', message: e.message }); } finally { setBusy(false); }
+  };
+
+  const downloadPo = (po: PurchaseOrder, items: PoLineItem[]) => {
+    const vendor = vendors.find(v => v.id === po.vendor_id);
+    const data: PoDocData = {
+      poNumber: po.po_number,
+      poDate: po.created_at,
+      deliveryDate: po.delivery_date,
+      projectName: projectName(po.crm_project_id),
+      vendorName: vendor?.company_name ?? '—',
+      deliveryAddress: po.notes ?? null,
+      materialType: null,
+      firm: {
+        name: firm?.name ?? '',
+        address: firm?.address ?? '',
+        gstin: firm?.gstin ?? '',
+        phone: undefined,
+        email: undefined,
+      },
+      items: items.map(i => ({ description: i.description, quantity: i.quantity, uom: i.uom, rate: i.rate, amount: i.amount })),
+      subtotal: po.subtotal,
+      gstRate: po.gst_rate,
+      gstType: (po.gst_type === 'exclusive' ? 'exclusive' : 'inclusive'),
+      gstAmount: po.gst_amount,
+      total: po.total_amount,
+      creditDays: null,
+      orderContactName: user?.full_name ?? null,
+      orderContactPhone: user?.phone ?? null,
+      deliveryContactName: null,
+      deliveryContactPhone: null,
+      signatoryName: user?.full_name ?? null,
+    };
+    try { downloadPoDocx(data); }
+    catch (e: any) { setBanner({ kind: 'error', message: e.message || 'Could not generate PO document.' }); }
   };
 
   if (!canAccess('purchasing')) return (<div className="space-y-6"><InvHeader title="Purchase Orders" /><AccessNotice label="Purchase Orders" /></div>);
@@ -198,6 +233,7 @@ export function PurchaseOrdersPage({ onNavigate }: { onNavigate: (p: Page, proje
       {detail && (
         <PoDetail detail={detail} busy={busy} can={can} projectName={projectName} vendorName={vendorName}
           onClose={() => setDetail(null)}
+          onDownload={() => downloadPo(detail.po, detail.items)}
           onApprove={() => act(() => decidePo(detail.po.id, 'approve', null), 'PO approved.')}
           onNeedsChanges={(n: string) => act(() => decidePo(detail.po.id, 'needs_changes', n), 'Sent back for changes.')}
           onReject={(n: string) => act(() => decidePo(detail.po.id, 'reject', n), 'PO cancelled.')}
@@ -208,7 +244,7 @@ export function PurchaseOrdersPage({ onNavigate }: { onNavigate: (p: Page, proje
   );
 }
 
-function PoDetail({ detail, busy, can, projectName, vendorName, onClose, onApprove, onNeedsChanges, onReject, onIssue, onReceive }: any) {
+function PoDetail({ detail, busy, can, projectName, vendorName, onClose, onDownload, onApprove, onNeedsChanges, onReject, onIssue, onReceive }: any) {
   const { po, items } = detail as { po: PurchaseOrder; items: PoLineItem[] };
   const [note, setNote] = useState('');
   return (
@@ -241,6 +277,7 @@ function PoDetail({ detail, busy, can, projectName, vendorName, onClose, onAppro
           <Input label="Review note (optional)" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason for changes / rejection" />
         )}
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button variant="secondary" onClick={onDownload}><Download className="h-4 w-4" /> Download PO</Button>
           {po.status === 'pending_approval' && can('purchasing', 'approve') && (
             <>
               <Button variant="ghost" onClick={() => onNeedsChanges(note || 'Please revise')} disabled={busy}><RotateCcw className="h-4 w-4" /> Needs changes</Button>
