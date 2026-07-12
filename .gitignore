@@ -1,0 +1,15 @@
+node_modules/
+dist/
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/schema_public.sql
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+*.log
