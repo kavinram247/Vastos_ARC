@@ -1,26 +1,6 @@
 -- ─────────────────────────────────────────────────────────────
--- 28_purchase_management.sql
---
--- Purchase Management module. Reuses the existing commercial layer as the
--- single source of truth (no duplicate vendor / material / PO records):
---   • vendors          → supplier master (extended with code / credit terms)
---   • catalog_products → material master (reused as-is)
---   • purchase_orders  → unified PO ledger (extended with delivery / payment /
---                        approval / totals + links back to RFQ / request)
---
--- and adds the net-new procurement entities that had no home:
---   • material_requests (+ items)  — site-engineer intake (the CMR)
---   • rfqs (+ items + vendors)     — request for quotation
---   • po_payments                  — PO payment records
---   • project_stock                — per-project inventory
---   • work_orders                  — contractor work orders
---
--- Cross-family link columns (project_id / engineer_id) are stored as TEXT to
--- match the crm_* legacy string PKs; intra-module children use uuid FKs with
--- ON DELETE CASCADE. New tables get the same permissive *_anon_dev RLS as the
--- rest of the app (drop in the Phase F auth-hardening pass, with 17/20/…/24).
---
--- Safe to run more than once (IF NOT EXISTS / idempotent guards throughout).
+-- 28_purchase_management.sql (renamed to avoid collision with the Inventory
+-- module's material_requests/rfqs family — see comment at section 4 below)
 -- ─────────────────────────────────────────────────────────────
 
 begin;
@@ -31,8 +11,6 @@ alter table vendors add column if not exists credit_days   integer default 0;
 alter table vendors add column if not exists payment_terms text;
 
 -- ── 2. purchase_orders → unified PO ledger ───────────────────
---    (already has firm_id, project_id, vendor_id, boq_id, po_number,
---     status[po_status], total_amount, gst_amount, required_by, …)
 alter table purchase_orders add column if not exists material_type          text;
 alter table purchase_orders add column if not exists payment_status         text    not null default 'outstanding';
 alter table purchase_orders add column if not exists delivery_date          date;
@@ -81,8 +59,8 @@ create table if not exists purchase_material_requests (
   plant_description   text,
   total_days          integer,
   engineer_id         text,
-  status              text not null default 'open',   -- open | in_rfq | in_po | fulfilled | cancelled
-  client_requirements jsonb not null default '[]'::jsonb,  -- [{requirement, before}]
+  status              text not null default 'open',
+  client_requirements jsonb not null default '[]'::jsonb,
   notes               text,
   created_by          text,
   created_at          timestamptz not null default now(),
@@ -113,7 +91,7 @@ create table if not exists purchase_rfqs (
   rfq_date            date not null default current_date,
   project_id          text,
   material_type       text,
-  status              text not null default 'draft',  -- draft | sent | quotes_received | closed
+  status              text not null default 'draft',
   quote_valid_until   date,
   material_request_id uuid,
   notes               text,
@@ -145,7 +123,7 @@ create table if not exists purchase_rfq_vendors (
   vendor_name   text not null default '',
   mobile        text,
   sent_date     date,
-  status        text not null default 'pending',  -- pending | sent | responded | declined
+  status        text not null default 'pending',
   quoted_amount numeric,
   order_index   integer not null default 0
 );
@@ -179,7 +157,7 @@ create table if not exists work_orders (
   contractor_vendor_id uuid,
   wo_date              date not null default current_date,
   amount               numeric,
-  status               text not null default 'draft',  -- draft | issued | in_progress | completed | cancelled
+  status               text not null default 'draft',
   work_description     text,
   terms_of_payment     text,
   terms_conditions     text,

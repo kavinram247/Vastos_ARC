@@ -13,3 +13,4 @@ supabase/schema_public.sql
 # OS / editor
 .DS_Store
 *.log
+.vercel
