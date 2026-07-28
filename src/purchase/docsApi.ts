@@ -71,9 +71,9 @@ export async function saveRequest(input: RequestInput, firmId: string, userId: s
   };
   let id = input.id;
   if (id) {
-    const { error } = await sb.from('purchase_material_requests').update(header).eq('id', id);
+    const { error } = await sb.from('purchase_material_requests').update(header).eq('id', id).eq('firm_id', firmId);
     if (error) throw error;
-    await sb.from('purchase_material_request_items').delete().eq('request_id', id);
+    await sb.from('purchase_material_request_items').delete().eq('request_id', id).eq('firm_id', firmId);
   } else {
     const request_number = formatDocNumber('MR', await nextSeq('purchase_material_requests', firmId));
     const { data, error } = await sb.from('purchase_material_requests')
@@ -87,13 +87,14 @@ export async function saveRequest(input: RequestInput, firmId: string, userId: s
   return id!;
 }
 
-export async function setRequestStatus(id: string, status: MaterialRequest['status']): Promise<void> {
-  const { error } = await sb.from('purchase_material_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+// firmId required (audit H2) — these matched on id alone.
+export async function setRequestStatus(id: string, status: MaterialRequest['status'], firmId: string): Promise<void> {
+  const { error } = await sb.from('purchase_material_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id).eq('firm_id', firmId);
   if (error) throw error;
 }
 
-export async function deleteRequest(id: string): Promise<void> {
-  const { error } = await sb.from('purchase_material_requests').delete().eq('id', id);
+export async function deleteRequest(id: string, firmId: string): Promise<void> {
+  const { error } = await sb.from('purchase_material_requests').delete().eq('id', id).eq('firm_id', firmId);
   if (error) throw error;
 }
 
@@ -211,7 +212,7 @@ export async function createRfqFromRequest(req: MaterialRequest, firmId: string,
     material_request_id: req.id, notes: `From request ${req.request_number}`, items,
     vendors: [],
   }, firmId, userId);
-  await setRequestStatus(req.id, 'in_rfq');
+  await setRequestStatus(req.id, 'in_rfq', firmId);
   return id;
 }
 

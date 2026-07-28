@@ -78,12 +78,15 @@ export async function checkIn(
   if (error) throw error;
 }
 
-export async function checkOut(recordId: string, geo: GeoFix | null, label: string | null): Promise<void> {
+// firmId is required (audit H2): these matched on id alone, so any harvested
+// record id addressed a row. RLS already refuses cross-firm writes; this makes
+// the client agree with it rather than depend on it.
+export async function checkOut(recordId: string, geo: GeoFix | null, label: string | null, firmId: string): Promise<void> {
   const { error } = await supabase.from('attendance_records').update({
     check_out_at: new Date().toISOString(),
     check_out_lat: geo?.lat ?? null, check_out_lng: geo?.lng ?? null, check_out_accuracy: geo?.accuracy ?? null,
     check_out_label: label || null, updated_at: new Date().toISOString(),
-  } as any).eq('id', recordId);
+  } as any).eq('id', recordId).eq('firm_id', firmId);
   if (error) throw error;
 }
 
@@ -112,7 +115,7 @@ export async function saveManualAttendance(input: ManualAttendanceInput, markedB
   if (error) throw error;
 }
 
-export async function deleteAttendance(id: string): Promise<void> {
-  const { error } = await supabase.from('attendance_records').delete().eq('id', id);
+export async function deleteAttendance(id: string, firmId: string): Promise<void> {
+  const { error } = await supabase.from('attendance_records').delete().eq('id', id).eq('firm_id', firmId);
   if (error) throw error;
 }

@@ -52,8 +52,32 @@ function coerce(rows: any[]): any[] {
   return rows;
 }
 
+// ── Firm scoping for writes (audit H2) ──
+// Reads were always firm-scoped; the write helpers below matched on `id` alone,
+// so a harvested or guessed id was the only thing needed to address a row.
+//
+// Postgres already refuses those writes: every crm_* table carries
+//   for all to authenticated
+//     using (firm_id = current_firm_id()) with check (firm_id = current_firm_id())
+// and current_firm_id() resolves from auth.uid(), so it cannot be forged the way
+// the x-crm-role-id header could (C4). Verified as a second firm's owner against
+// firm A's rows — PATCH and DELETE both matched zero rows.
+//
+// The predicate is added here anyway so the client and the database agree about
+// the boundary, and so a future policy regression is not silently the only thing
+// holding. Defence in depth, not the defence.
+let activeFirmId: string | null = null;
+
+/** Called on hydration; scopes every subsequent write to this firm. */
+export function setActiveFirm(firmId: string | null) { activeFirmId = firmId; }
+
+function scoped(q: any) {
+  return activeFirmId ? q.eq('firm_id', activeFirmId) : q;
+}
+
 /** Load every CRM table for a firm into the store's array shape (numerics coerced). */
 export async function hydrateAll(firmId: string): Promise<Record<StoreKey, any[]>> {
+  setActiveFirm(firmId);
   const keys = Object.keys(TABLES) as StoreKey[];
   const results = await Promise.all(keys.map((k) => sb.from(TABLES[k]).select('*').eq('firm_id', firmId)));
   const out = {} as Record<StoreKey, any[]>;
@@ -73,10 +97,10 @@ export function persistUpsert(key: StoreKey, row: any) {
   sb.from(TABLES[key]).upsert(row, { onConflict: 'id' }).then(({ error }: any) => { if (error) console.error(`upsert ${TABLES[key]}`, error.message); });
 }
 export function persistUpdate(key: StoreKey, id: string, patch: any) {
-  sb.from(TABLES[key]).update(patch).eq('id', id).then(({ error }: any) => { if (error) console.error(`update ${TABLES[key]}`, error.message); });
+  scoped(sb.from(TABLES[key]).update(patch).eq('id', id)).then(({ error }: any) => { if (error) console.error(`update ${TABLES[key]}`, error.message); });
 }
 export async function awaitUpdate(key: StoreKey, id: string, patch: any): Promise<string | null> {
-  const { error } = await sb.from(TABLES[key]).update(patch).eq('id', id);
+  const { error } = await scoped(sb.from(TABLES[key]).update(patch).eq('id', id));
   return error?.message ?? null;
 }
 export async function awaitInsert(key: StoreKey, row: any): Promise<string | null> {
@@ -86,15 +110,15 @@ export async function awaitInsert(key: StoreKey, row: any): Promise<string | nul
 export function persistUpdateWhere(key: StoreKey, match: Record<string, any>, patch: any) {
   let q = sb.from(TABLES[key]).update(patch);
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
-  q.then(({ error }: any) => { if (error) console.error(`updateWhere ${TABLES[key]}`, error.message); });
+  scoped(q).then(({ error }: any) => { if (error) console.error(`updateWhere ${TABLES[key]}`, error.message); });
 }
 export function persistDelete(key: StoreKey, id: string) {
-  sb.from(TABLES[key]).delete().eq('id', id).then(({ error }: any) => { if (error) console.error(`delete ${TABLES[key]}`, error.message); });
+  scoped(sb.from(TABLES[key]).delete().eq('id', id)).then(({ error }: any) => { if (error) console.error(`delete ${TABLES[key]}`, error.message); });
 }
 export function persistDeleteWhere(key: StoreKey, match: Record<string, any>) {
   let q = sb.from(TABLES[key]).delete();
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
-  q.then(({ error }: any) => { if (error) console.error(`deleteWhere ${TABLES[key]}`, error.message); });
+  scoped(q).then(({ error }: any) => { if (error) console.error(`deleteWhere ${TABLES[key]}`, error.message); });
 }
 
 // ── atomic lead claim (self-assignment) ──

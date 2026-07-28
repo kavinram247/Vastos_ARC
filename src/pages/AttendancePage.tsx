@@ -93,7 +93,7 @@ export function AttendancePage() {
     try {
       const geo = await captureLocation();
       if (!geo && !confirm('Location is unavailable or was blocked. Check out without location?')) return;
-      await checkOut(myToday.id, geo, label || null);
+      await checkOut(myToday.id, geo, label || null, firm!.id);
       setLabel('');
       await load();
     } catch (e) { alert('Check-out failed: ' + (e as any).message); } finally { setBusy(null); }
@@ -142,7 +142,7 @@ export function AttendancePage() {
           employees={employees} records={records} date={date} setDate={setDate}
           onAdd={() => { setEditing(null); setShowModal(true); }}
           onEdit={(rec) => { setEditing(recordToInput(rec)); setShowModal(true); }}
-          onDelete={async (id) => { if (confirm('Delete this attendance record?')) { await deleteAttendance(id); await load(); } }}
+          onDelete={async (id) => { if (confirm('Delete this attendance record?')) { await deleteAttendance(id, firm!.id); await load(); } }}
         />
       ) : (
         <MyHistory records={records} />

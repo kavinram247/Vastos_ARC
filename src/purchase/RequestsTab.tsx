@@ -37,7 +37,7 @@ export function RequestsTab() {
   };
   const onDelete = async (r: MaterialRequest) => {
     if (!confirm(`Delete request ${r.request_number}?`)) return;
-    try { await deleteRequest(r.id); await reload(); } catch (e: any) { alert('Failed: ' + e.message); }
+    try { await deleteRequest(r.id, firmId); await reload(); } catch (e: any) { alert('Failed: ' + e.message); }
   };
 
   const doExport = () => exportCsv('material-requests', [

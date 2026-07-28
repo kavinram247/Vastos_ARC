@@ -23,6 +23,13 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
+// Base URL for edge functions. Derived from the same configured project as the
+// database client, so a staging build cannot address production functions.
+// Phase 1 removed the hardcoded production URL here and in AcceptInvitePage,
+// but two more survived in src/leads/LeadsAdminPage.tsx (audit H5, residual) —
+// they addressed the production project literally, by ref, from every build.
+export const FUNCTIONS_BASE_URL = `${SUPABASE_URL}/functions/v1`;
+
 // ── RBAC backend context ──
 // Removed (audit C4). This used to stamp `x-crm-role-id` on every PostgREST
 // request, and crm_current_role_id() read the role straight back out of that

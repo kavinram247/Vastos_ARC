@@ -383,10 +383,16 @@ function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: ()
         phone: form.phone.trim() || undefined,
       });
 
-      // 4. Generate invite token — no Supabase auth email, admin shares the link manually
-      const { data: invite, error: ie } = await (supabase as any).from('user_invites')
-        .insert({ firm_id: firmId, email, full_name: form.full_name.trim(), role_id: form.role_id || null })
-        .select('token').single();
+      // 4. Generate invite token — no Supabase auth email, admin shares the link manually.
+      // Audit C3: user_invites is deny-all for clients, so this goes through an
+      // admin-checked RPC. The firm is taken from the caller's own session, not
+      // from `firmId` here, so an admin cannot mint an invite into another
+      // tenant. The token comes back exactly once, to build the link below.
+      const { data: invite, error: ie } = await (supabase as any).rpc('create_invite', {
+        p_email: email,
+        p_full_name: form.full_name.trim(),
+        p_role_id: form.role_id || null,
+      });
       if (ie) throw ie;
 
       setInviteLink(`${window.location.origin}?invite=${invite.token}`);

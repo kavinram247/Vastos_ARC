@@ -104,9 +104,9 @@ export async function savePurchaseOrder(input: PoInput, firmId: string, userId: 
   let id = input.id;
   let poNumber = '';
   if (id) {
-    const { error } = await sb.from('purchase_orders').update(header).eq('id', id);
+    const { error } = await sb.from('purchase_orders').update(header).eq('id', id).eq('firm_id', firmId);
     if (error) throw error;
-    await sb.from('po_line_items').delete().eq('po_id', id);
+    await sb.from('po_line_items').delete().eq('po_id', id).eq('firm_id', firmId);
   } else {
     const po_number = formatDocNumber('PO', await nextSeq(firmId));
     poNumber = po_number;
@@ -131,20 +131,28 @@ export async function savePurchaseOrder(input: PoInput, firmId: string, userId: 
 }
 
 export async function submitForApproval(po: PurchaseOrder, firmId: string, userId: string): Promise<void> {
-  const { error } = await sb.from('purchase_orders').update({ approval_status: 'pending' }).eq('id', po.id);
+  const { error } = await sb.from('purchase_orders').update({ approval_status: 'pending' }).eq('id', po.id).eq('firm_id', firmId);
   if (error) throw error;
   logPurchaseActivity({ firmId, actorId: userId, action: 'status_changed', label: `${po.po_number} submitted for approval`, entityId: po.id, entityName: po.po_number });
   notifyAdmins({ firmId, actorId: userId, title: 'Purchase order needs approval', message: `${po.po_number} was submitted for approval`, type: 'warning' });
 }
 
-/** Approve or reject a PO. Approval also marks it issued (ready to send). */
+/**
+ * Approve or reject a PO. Approval also marks it issued (ready to send).
+ *
+ * Goes through approve_purchase_order() — audit H4. This was a bare table
+ * UPDATE, so anyone with a session could approve any order by id regardless of
+ * their permissions or who raised it. The RPC re-derives the actor from
+ * auth.uid() and enforces firm binding, purchase:approve, the pending state,
+ * and segregation of duties (an approver may not approve their own order).
+ * Those checks are the server's; the UI gating below is convenience only.
+ */
 export async function decidePoApproval(
   po: PurchaseOrder, decision: 'approved' | 'rejected', adminNotes: string | null, firmId: string, userId: string,
 ): Promise<void> {
-  const patch: any = { approval_status: decision, admin_notes: adminNotes || null };
-  if (decision === 'approved') patch.status = 'issued', patch.issued_at = new Date().toISOString();
-  if (decision === 'rejected') patch.status = 'cancelled';
-  const { error } = await sb.from('purchase_orders').update(patch).eq('id', po.id);
+  const { error } = await sb.rpc('approve_purchase_order', {
+    p_po_id: po.id, p_decision: decision, p_notes: adminNotes || null,
+  });
   if (error) throw error;
   logPurchaseActivity({ firmId, actorId: userId, action: decision === 'approved' ? 'approved' : 'status_changed', label: `${po.po_number} ${decision}`, entityId: po.id, entityName: po.po_number });
 }
@@ -172,10 +180,10 @@ export async function receivePurchaseOrder(po: PurchaseOrder, firmId: string, us
   logPurchaseActivity({ firmId, actorId: userId, action: 'status_changed', label: `${po.po_number} received into stock`, entityId: po.id, entityName: po.po_number });
 }
 
-export async function deletePurchaseOrder(id: string): Promise<void> {
-  await sb.from('po_line_items').delete().eq('po_id', id);
-  await sb.from('po_payments').delete().eq('po_id', id);
-  const { error } = await sb.from('purchase_orders').delete().eq('id', id);
+export async function deletePurchaseOrder(id: string, firmId: string): Promise<void> {
+  await sb.from('po_line_items').delete().eq('po_id', id).eq('firm_id', firmId);
+  await sb.from('po_payments').delete().eq('po_id', id).eq('firm_id', firmId);
+  const { error } = await sb.from('purchase_orders').delete().eq('id', id).eq('firm_id', firmId);
   if (error) throw error;
 }
 
@@ -193,7 +201,7 @@ export async function createPoFromRfq(rfq: Rfq, firmId: string, userId: string):
     notes: `From RFQ ${rfq.rfq_number}`, items,
   }, firmId, userId);
   await setRfqStatus(rfq.id, 'closed');
-  if (rfq.material_request_id) await setRequestStatus(rfq.material_request_id, 'in_po');
+  if (rfq.material_request_id) await setRequestStatus(rfq.material_request_id, 'in_po', firmId);
   return id;
 }
 
@@ -208,7 +216,7 @@ export async function createPoFromRequest(req: MaterialRequest, firmId: string, 
     required_by: req.items.find(i => i.required_by)?.required_by || null,
     notes: `From request ${req.request_number}`, items,
   }, firmId, userId);
-  await setRequestStatus(req.id, 'in_po');
+  await setRequestStatus(req.id, 'in_po', firmId);
   return id;
 }
 

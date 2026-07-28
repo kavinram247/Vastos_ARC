@@ -15,7 +15,7 @@ import { downloadPoDocx } from './poDocx';
 import { PurchaseOrderForm } from './PurchaseOrderForm';
 
 export function PurchaseOrdersTab() {
-  const { pos, vendors, can, reload } = usePurchase();
+  const { pos, vendors, can, reload, firmId } = usePurchase();
   const { firm } = useAuth();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -35,7 +35,7 @@ export function PurchaseOrdersTab() {
 
   const onDelete = async (p: PurchaseOrder) => {
     if (!confirm(`Delete purchase order ${p.po_number}? Line items and payments will be removed.`)) return;
-    try { await deletePurchaseOrder(p.id); await reload(); } catch (e: any) { alert('Failed: ' + e.message); }
+    try { await deletePurchaseOrder(p.id, firmId); await reload(); } catch (e: any) { alert('Failed: ' + e.message); }
   };
 
   const originChip = (p: PurchaseOrder) =>

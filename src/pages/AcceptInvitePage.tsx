@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Eye, EyeOff, Loader2, CheckCircle, XCircle, ArrowRight } from 'lucide-react';
 
+// Only what validate_invite() returns. firm_id, role_id and the token itself
+// are deliberately never sent to this page (audit C3) — the accept-invite edge
+// function reads them server-side from the token the user already holds.
 interface InviteRow {
-  id: string;
-  firm_id: string;
   email: string;
   full_name: string | null;
-  expires_at: string;
-  accepted_at: string | null;
 }
 
 interface Props { token: string }
@@ -22,15 +21,16 @@ export function AcceptInvitePage({ token }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Audit C3: user_invites is deny-all for every client role — `token` is a
+  // bearer credential that exchanges for a confirmed account, and this table
+  // used to be readable by anon. validate_invite() returns only the email and
+  // a status; expiry and acceptance are decided server-side.
   useEffect(() => {
-    supabase.from('user_invites').select('id,firm_id,email,full_name,expires_at,accepted_at')
-      .eq('token', token).maybeSingle()
-      .then(({ data, error: e }) => {
+    (supabase as any).rpc('validate_invite', { p_token: token })
+      .then(({ data, error: e }: any) => {
         if (e || !data) { setStatus('invalid'); return; }
-        const row = data as InviteRow;
-        if (row.accepted_at) { setStatus('used'); return; }
-        if (new Date(row.expires_at) < new Date()) { setStatus('expired'); return; }
-        setInvite(row);
+        if (data.status !== 'valid') { setStatus(data.status); return; }
+        setInvite({ email: data.email, full_name: data.full_name } as InviteRow);
         setStatus('valid');
       });
   }, [token]);

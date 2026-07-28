@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { formatINR, formatDate } from '../../utils/format';
-import { fetchPublicQuote, markViewed, acceptQuote, type PublicQuote, type ScheduleWithMilestones } from '../quoteShareApi';
+import { fetchPublicQuote, acceptQuote, type PublicQuote, type ScheduleWithMilestones } from '../quoteShareApi';
 import { clientQuoteView } from '../engine/documents';
 import { Building2, Check, Loader2, Plus, ShieldCheck, CalendarClock, Sparkles } from 'lucide-react';
 
@@ -20,7 +20,7 @@ export function ClientQuotePage({ token }: { token: string }) {
       setData(q);
       setSelected(new Set(q.quotation.selected_options || []));
       if (q.quotation.status === 'accepted') { setAccepted(true); setSchedule(q.schedule); }
-      markViewed(token).catch(() => {});
+      // viewed_at is stamped by quote_public_view() as part of the read.
     }).catch((e) => setError(e.message || 'Quote not found'));
   }, [token]);
 
@@ -40,10 +40,10 @@ export function ClientQuotePage({ token }: { token: string }) {
     if (!data || !view || !name.trim()) return;
     setAccepting(true);
     try {
+      // Totals are deliberately NOT sent — accept_quote() recomputes them from
+      // the BOQ server-side. `view` below is presentation only.
       const sched = await acceptQuote({
-        quotationId: data.quotation.id, firmId: data.quotation.firm_id, boqId: data.quotation.boq_id,
-        name: name.trim(), selectedOptionalIds: [...selected],
-        taxable: view.taxable, gst: view.gst, grandTotal: view.grand_total,
+        token, name: name.trim(), selectedOptionalIds: [...selected],
       });
       setSchedule(sched); setAccepted(true);
     } catch (e) { alert('Could not accept: ' + (e as any).message); } finally { setAccepting(false); }

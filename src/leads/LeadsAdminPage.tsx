@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select } from '../components/ui/Input';
+import { FUNCTIONS_BASE_URL } from '../lib/supabase';
 import { stageColor } from './logic';
 import { TELEPHONY_PROVIDERS, type TelephonyConfig } from './telephony';
 import type { Page } from '../types';
@@ -40,7 +41,9 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
   const flags = store.featureFlags.filter(f => f.firm_id === firmId);
   const stages = store.pipelineStages.filter(s => s.firm_id === firmId).sort((a, b) => a.order_index - b.order_index);
   const channels = store.commChannels.filter(c => c.firm_id === firmId);
-  const webhookUrl = `https://weckowkvqpamnlcqwvfh.supabase.co/functions/v1/lead-intake`;
+  // Audit H5 (residual): was the production project ref, hardcoded — a staging
+  // build showed admins a webhook that posted real leads into production.
+  const webhookUrl = `${FUNCTIONS_BASE_URL}/lead-intake`;
 
   const moveStage = (id: string, dir: -1 | 1) => {
     const i = stages.findIndex(s => s.id === id);
@@ -177,7 +180,7 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
   );
 }
 
-const TELEPHONY_FN_URL = 'https://weckowkvqpamnlcqwvfh.supabase.co/functions/v1/telephony-call';
+const TELEPHONY_FN_URL = `${FUNCTIONS_BASE_URL}/telephony-call`;   // audit H5 (residual)
 
 function TelephonyConfigModal({ channelId, userId, onClose }: { channelId: string; userId: string; onClose: () => void }) {
   const store = useStore();
