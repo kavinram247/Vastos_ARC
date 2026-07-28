@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { Profile, Firm, UserRole, Role } from '../types';
-import { supabase, setRoleContext } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { store } from '../data/store';
 
 // ── Plan type ──────────────────────────────────────────────────
@@ -111,19 +111,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // The server resolves the caller's role from auth.uid(); the client no longer
+  // asserts it. See supabase.ts → the removed setRoleContext (audit C4).
   const enter = useCallback((profile: Profile, firmData: Firm, planData: SubscriptionPlan | null) => {
     setUser(profile);
     setFirm(firmData);
     setPlan(planData);
-    const roleId = store.roleForUser(profile.id)?.id ?? profile.role_id ?? null;
-    setRoleContext(roleId);
   }, []);
 
   const clear = useCallback(() => {
     setUser(null);
     setFirm(null);
     setPlan(null);
-    setRoleContext(null);
   }, []);
 
   // Listen for Supabase auth state changes

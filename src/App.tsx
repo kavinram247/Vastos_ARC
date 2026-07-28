@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useStore } from './hooks/useStore';
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })));
-const VastosAdminPage  = lazy(() => import('./pages/VastosAdminPage').then(m => ({ default: m.VastosAdminPage })));
 import { Loader2 } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
@@ -218,8 +217,6 @@ export default function App() {
     return <ClientQuotePage token={params.get('quote')!} />;
   if (params.get('invite'))
     return <Suspense fallback={null}><AcceptInvitePage token={params.get('invite')!} /></Suspense>;
-  if (params.get('vastos-admin') === 'true')
-    return <Suspense fallback={null}><VastosAdminPage /></Suspense>;
 
   return (
     <AuthProvider>

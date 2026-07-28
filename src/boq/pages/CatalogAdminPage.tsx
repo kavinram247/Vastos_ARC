@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -89,10 +90,14 @@ function EditNum({ value, onSave, prefix, suffix, step = '1', width = 'w-28' }: 
 }
 
 function MaterialsTab() {
+  const { firm } = useAuth();
   const [rows, setRows] = useState<MaterialRow[]>([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
-  useEffect(() => { fetchMaterialRows().then((r) => { setRows(r); setLoading(false); }).catch(console.error); }, []);
+  useEffect(() => {
+    if (!firm) return;
+    fetchMaterialRows(firm.id).then((r) => { setRows(r); setLoading(false); }).catch(console.error);
+  }, [firm?.id]);
 
   const filtered = useMemo(() => {
     const s = q.toLowerCase();
@@ -100,7 +105,7 @@ function MaterialsTab() {
       r.skus.some((k) => (k.brand || '').toLowerCase().includes(s)));
   }, [rows, q]);
 
-  if (loading) return <Loading />;
+  if (!firm || loading) return <Loading />;
   return (
     <Card padding="none">
       <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3">
@@ -136,7 +141,7 @@ function MaterialsTab() {
                   <td className="px-2 py-2 text-slate-400">{p.base_uom}</td>
                   <td className="px-2 py-2 text-right">
                     <EditNum value={s.current_rate} prefix="₹" step="0.5"
-                      onSave={(v) => saveMaterialRate(s.sku_id, v)} />
+                      onSave={(v) => saveMaterialRate(s.sku_id, v, firm.id)} />
                   </td>
                   <td className="px-4 py-2 text-right">
                     {i === 0 && <EditNum value={p.waste_factor * 100} suffix="%" step="0.5" width="w-20"
@@ -153,10 +158,14 @@ function MaterialsTab() {
 }
 
 function LabourTab() {
+  const { firm } = useAuth();
   const [rows, setRows] = useState<LabourRow[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { fetchLabourRows().then((r) => { setRows(r); setLoading(false); }).catch(console.error); }, []);
-  if (loading) return <Loading />;
+  useEffect(() => {
+    if (!firm) return;
+    fetchLabourRows(firm.id).then((r) => { setRows(r); setLoading(false); }).catch(console.error);
+  }, [firm?.id]);
+  if (!firm || loading) return <Loading />;
   return (
     <Card padding="none">
       <div className="overflow-x-auto">
@@ -176,7 +185,7 @@ function LabourTab() {
                 <td className="px-2 py-2"><Badge variant="default" size="sm" className="capitalize">{a.trade || '—'}</Badge></td>
                 <td className="px-2 py-2 text-slate-400">{a.base_uom}</td>
                 <td className="px-4 py-2 text-right">
-                  <EditNum value={a.current_rate} prefix="₹" step="5" onSave={(v) => saveLabourRate(a.activity_id, v)} />
+                  <EditNum value={a.current_rate} prefix="₹" step="5" onSave={(v) => saveLabourRate(a.activity_id, v, firm.id)} />
                 </td>
               </tr>
             ))}
@@ -189,13 +198,17 @@ function LabourTab() {
 }
 
 function MarginsTab() {
+  const { firm } = useAuth();
   const [m, setM] = useState<MarginRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
-  const reload = () => { setLoading(true); ensureMargin().then(setM).catch(console.error).finally(() => setLoading(false)); };
-  useEffect(() => { reload(); }, []);
-  if (loading) return <Loading />;
+  const reload = () => {
+    if (!firm) return;
+    setLoading(true); ensureMargin(firm.id).then(setM).catch(console.error).finally(() => setLoading(false));
+  };
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [firm?.id]);
+  if (!firm || loading) return <Loading />;
   if (!m) return (
     <Card className="max-w-lg space-y-3">
       <CardTitle>Default margin policy</CardTitle>
@@ -223,10 +236,14 @@ function MarginsTab() {
 }
 
 function RegionsTab() {
+  const { firm } = useAuth();
   const [rows, setRows] = useState<RegionAdminRow[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { fetchRegionAdmin().then((r) => { setRows(r); setLoading(false); }).catch(console.error); }, []);
-  if (loading) return <Loading />;
+  useEffect(() => {
+    if (!firm) return;
+    fetchRegionAdmin(firm.id).then((r) => { setRows(r); setLoading(false); }).catch(console.error);
+  }, [firm?.id]);
+  if (!firm || loading) return <Loading />;
   const upd = (id: string, patch: Partial<RegionAdminRow>) => setRows((rs) => rs.map((r) => r.id === id ? { ...r, ...patch } : r));
   return (
     <Card padding="none">
@@ -745,11 +762,13 @@ function NewTemplateModal({ onClose, onCreate }: {
   onClose: () => void;
   onCreate: (t: TemplateAdminRow) => void;
 }) {
+  const { firm } = useAuth();
   const [form, setForm] = useState({ code: '', name: '', category: '', description: '', param_schema: '{}' });
   const [saving, setSaving] = useState(false);
   const f = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
   const handleCreate = async () => {
+    if (!firm) return;
     if (!form.code.trim() || !form.name.trim()) { alert('Code and name are required.'); return; }
     let param_schema: any;
     try { param_schema = JSON.parse(form.param_schema); } catch { alert('Param schema is not valid JSON.'); return; }
@@ -758,7 +777,7 @@ function NewTemplateModal({ onClose, onCreate }: {
       const id = await createTemplateFull({
         code: form.code.trim(), name: form.name.trim(), category: form.category.trim(),
         description: form.description.trim(), param_schema, derived_vars: [],
-      });
+      }, firm.id);
       onCreate({
         id, code: form.code.trim(), name: form.name.trim(), category: form.category.trim(),
         description: form.description.trim() || null, param_schema, derived_vars: [], is_active: true, rules: [],

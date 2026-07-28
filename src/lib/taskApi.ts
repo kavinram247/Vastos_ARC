@@ -10,7 +10,7 @@
 //   task_subtasks  — checklist items
 //   task_activity  — timeline entries + comments (kind='comment')
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from './supabase';
+import { supabase } from './supabase';
 
 export type TaskStatus = 'not_started' | 'in_progress' | 'waiting' | 'completed' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
@@ -143,7 +143,7 @@ function normalizeTask(row: any): Task {
 }
 
 // ─── TASKS ───
-export async function listTasks(firmId = DEMO_FIRM_ID): Promise<Task[]> {
+export async function listTasks(firmId: string): Promise<Task[]> {
   const { data, error } = await supabase
     .from('tasks').select('*').eq('firm_id', firmId)
     .order('order_index', { ascending: true })
@@ -153,7 +153,7 @@ export async function listTasks(firmId = DEMO_FIRM_ID): Promise<Task[]> {
 }
 
 export async function createTask(
-  input: TaskInput, createdBy: { id: string; name: string }, firmId = DEMO_FIRM_ID,
+  input: TaskInput, createdBy: { id: string; name: string }, firmId: string,
 ): Promise<Task> {
   const payload: Record<string, any> = {
     firm_id: firmId,
@@ -219,7 +219,7 @@ export async function bulkUpdate(ids: string[], patch: Partial<TaskInput> & { ar
 }
 
 // ─── LISTS ───
-export async function listTaskLists(firmId = DEMO_FIRM_ID): Promise<TaskList[]> {
+export async function listTaskLists(firmId: string): Promise<TaskList[]> {
   const { data, error } = await supabase
     .from('task_lists').select('*').eq('firm_id', firmId).order('order_index', { ascending: true });
   if (error) throw error;
@@ -227,7 +227,7 @@ export async function listTaskLists(firmId = DEMO_FIRM_ID): Promise<TaskList[]> 
 }
 
 export async function createTaskList(
-  input: { name: string; color?: string; icon?: string | null }, createdBy: string, firmId = DEMO_FIRM_ID,
+  input: { name: string; color?: string; icon?: string | null }, createdBy: string, firmId: string,
 ): Promise<TaskList> {
   const { data, error } = await supabase.from('task_lists').insert({
     firm_id: firmId, name: input.name.trim(), color: input.color || 'slate',
@@ -249,14 +249,14 @@ export async function deleteTaskList(id: string): Promise<void> {
 }
 
 // ─── SUBTASKS ───
-export async function listSubtasks(firmId = DEMO_FIRM_ID): Promise<Subtask[]> {
+export async function listSubtasks(firmId: string): Promise<Subtask[]> {
   const { data, error } = await supabase
     .from('task_subtasks').select('*').eq('firm_id', firmId).order('order_index', { ascending: true });
   if (error) throw error;
   return (data || []) as any as Subtask[];
 }
 
-export async function addSubtask(taskId: string, title: string, orderIndex: number, firmId = DEMO_FIRM_ID): Promise<Subtask> {
+export async function addSubtask(taskId: string, title: string, orderIndex: number, firmId: string): Promise<Subtask> {
   const { data, error } = await supabase.from('task_subtasks').insert({
     firm_id: firmId, task_id: taskId, title: title.trim(), order_index: orderIndex,
   } as any).select('*').single();
@@ -283,7 +283,7 @@ export async function listActivity(taskId: string): Promise<TaskActivity[]> {
 }
 
 export async function logActivity(
-  taskId: string, actor: { id: string; name: string }, kind: ActivityKind, detail: string | null, firmId = DEMO_FIRM_ID,
+  taskId: string, actor: { id: string; name: string }, kind: ActivityKind, detail: string | null, firmId: string,
 ): Promise<void> {
   const { error } = await supabase.from('task_activity').insert({
     firm_id: firmId, task_id: taskId, actor_id: actor.id, actor_name: actor.name, kind, detail,
@@ -292,7 +292,7 @@ export async function logActivity(
 }
 
 // ─── ASSIGN PRIVILEGES (carried over) ───
-export async function listAssignPrivileges(firmId = DEMO_FIRM_ID): Promise<Set<string>> {
+export async function listAssignPrivileges(firmId: string): Promise<Set<string>> {
   const { data, error } = await supabase
     .from('task_assign_privileges').select('user_id').eq('firm_id', firmId);
   if (error) throw error;
@@ -300,7 +300,7 @@ export async function listAssignPrivileges(firmId = DEMO_FIRM_ID): Promise<Set<s
 }
 
 export async function setAssignPrivilege(
-  userId: string, userName: string, granted: boolean, grantedBy: string, firmId = DEMO_FIRM_ID,
+  userId: string, userName: string, granted: boolean, grantedBy: string, firmId: string,
 ): Promise<void> {
   if (granted) {
     const { error } = await supabase.from('task_assign_privileges')

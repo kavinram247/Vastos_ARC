@@ -2,7 +2,7 @@
 // Calibration data access — variance summary, apply calibration
 // (persist waste_factor + versioned rate cards + audit), reconcile actuals.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID, DEMO_USER_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { computeCalibration, overallAccuracy, type Calibration, type VarianceRow } from './engine/calibration';
 import { fetchBoqDetail } from './quotationApi';
 
@@ -13,7 +13,7 @@ export interface ProductVariance {
 }
 export interface VarianceSummary { products: ProductVariance[]; accuracy: number; total_samples: number; projects: number }
 
-export async function fetchVarianceSummary(firmId = DEMO_FIRM_ID): Promise<VarianceSummary> {
+export async function fetchVarianceSummary(firmId: string): Promise<VarianceSummary> {
   const [{ data: variance, error: ev }, { data: products, error: ep }, { data: skus, error: es }, { data: rates, error: er }] = await Promise.all([
     supabase.from('boq_actual_variance').select('product_id,project_id,estimated_qty,actual_qty,estimated_rate,actual_rate,estimated_cost,actual_cost').eq('firm_id', firmId),
     supabase.from('catalog_products').select('id,name,base_uom,waste_factor'),
@@ -65,7 +65,7 @@ export async function fetchVarianceSummary(firmId = DEMO_FIRM_ID): Promise<Varia
 export interface CalibrationResult { product: string; waste_old: number; waste_new: number; rate_old: number | null; rate_new: number | null }
 
 /** Apply calibration: update waste factors, insert versioned calibrated rate cards, log every change. */
-export async function runCalibration(regionId: string | null, firmId = DEMO_FIRM_ID): Promise<CalibrationResult[]> {
+export async function runCalibration(regionId: string | null, firmId: string, createdBy: string): Promise<CalibrationResult[]> {
   const summary = await fetchVarianceSummary(firmId);
   const results: CalibrationResult[] = [];
   const today = new Date().toISOString().slice(0, 10);
@@ -88,7 +88,7 @@ export async function runCalibration(regionId: string | null, firmId = DEMO_FIRM
     if (rateChanged && p.standard_sku_id) {
       await supabase.from('rate_cards').insert({
         firm_id: firmId, sku_id: p.standard_sku_id, region_id: regionId, rate: rateNew,
-        valid_from: today, source: 'calibrated', created_by: DEMO_USER_ID,
+        valid_from: today, source: 'calibrated', created_by: createdBy,
       } as any);
       await supabase.from('calibration_runs').insert({
         firm_id: firmId, product_id: p.product_id, region_id: regionId, metric: 'rate_index',
@@ -100,7 +100,7 @@ export async function runCalibration(regionId: string | null, firmId = DEMO_FIRM
   return results;
 }
 
-export async function fetchCalibrationHistory(firmId = DEMO_FIRM_ID) {
+export async function fetchCalibrationHistory(firmId: string) {
   const { data, error } = await supabase.from('calibration_runs')
     .select('metric,old_value,new_value,sample_size,run_at,catalog_products(name)')
     .eq('firm_id', firmId).order('run_at', { ascending: false }).limit(40);
@@ -113,7 +113,7 @@ export async function fetchCalibrationHistory(firmId = DEMO_FIRM_ID) {
 
 /** Reconcile a completed BOQ: write estimated-vs-actual rows from logged cost_entries.
  *  For the demo, if no actuals exist we synthesize plausible ones first. */
-export async function reconcileBoqFromActuals(boqId: string, regionId: string | null, firmId = DEMO_FIRM_ID): Promise<number> {
+export async function reconcileBoqFromActuals(boqId: string, regionId: string | null, firmId: string): Promise<number> {
   const detail = await fetchBoqDetail(boqId);
   const matLines = detail.sections.flatMap((s) => s.lines).filter((l) => l.product_id && !l.labour_activity_id);
   const rows = matLines.map((l) => {

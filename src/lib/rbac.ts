@@ -5,13 +5,15 @@
 // fixed catalog (modules map to code pages) and pure lookup helpers over the
 // store's `roles` / `rolePermissions` arrays.
 //
-// Backend note: enforcement is layered. The app gates every nav item, page, and
-// action with can()/canAccess(); Postgres RLS additionally consults
-// crm_has_permission() using the `x-crm-role-id` request header the app stamps
-// after login (see supabase.ts → setRoleContext). Under the shared anon key that
-// header is spoofable, so it is defense-in-depth only. Production hardening:
-// drop the *_anon_dev policies and switch crm_has_permission to resolve the role
-// from auth.uid() once real Supabase Auth is wired.
+// Backend note: enforcement is layered, and THIS FILE IS THE COSMETIC LAYER.
+// can()/canAccess() gate nav items, pages and actions so the UI shows the right
+// things — they stop nobody, because an attacker never runs this code.
+//
+// The real boundary is Postgres RLS, which consults crm_has_permission(). As of
+// the C4 fix that function resolves the caller's role from auth.uid() server-side
+// (it previously read the client's own `x-crm-role-id` header, which meant the
+// caller declared their own permissions). Never treat a check in this file as a
+// security control; if an action must be denied, deny it in a policy or an RPC.
 // ─────────────────────────────────────────────────────────────
 import {
   LayoutDashboard, TrendingUp, FolderKanban, ListChecks, CalendarCheck,

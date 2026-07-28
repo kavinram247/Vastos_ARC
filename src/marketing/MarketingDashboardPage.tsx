@@ -39,8 +39,9 @@ export function MarketingDashboardPage({ onNavigate }: Props) {
   const [filters, setFilters] = useState<MarketingFilters>(defaultFilters());
 
   useEffect(() => {
+    if (!firm) return;
     let alive = true;
-    fetchMarketingData(firm?.id)
+    fetchMarketingData(firm.id)
       .then(d => { if (alive) { setData(d); setLoading(false); } })
       .catch(e => { if (alive) { setError(String(e.message || e)); setLoading(false); } });
     return () => { alive = false; };

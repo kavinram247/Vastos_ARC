@@ -4,7 +4,7 @@
 // PostgREST returns `numeric` as strings; we coerce known numeric fields back
 // to numbers on hydration so the in-memory shape matches the app's expectations.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from './supabase';
+import { supabase } from './supabase';
 
 const sb = supabase as any;
 
@@ -53,7 +53,7 @@ function coerce(rows: any[]): any[] {
 }
 
 /** Load every CRM table for a firm into the store's array shape (numerics coerced). */
-export async function hydrateAll(firmId = DEMO_FIRM_ID): Promise<Record<StoreKey, any[]>> {
+export async function hydrateAll(firmId: string): Promise<Record<StoreKey, any[]>> {
   const keys = Object.keys(TABLES) as StoreKey[];
   const results = await Promise.all(keys.map((k) => sb.from(TABLES[k]).select('*').eq('firm_id', firmId)));
   const out = {} as Record<StoreKey, any[]>;

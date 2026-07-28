@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -12,6 +13,7 @@ import {
 import { Target, TrendingUp, AlertTriangle, RefreshCw, Loader2, Check, History, Wand2 } from 'lucide-react';
 
 export function CalibrationPage() {
+  const { user, firm } = useAuth();
   const [summary, setSummary] = useState<VarianceSummary | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [regions, setRegions] = useState<RegionRow[]>([]);
@@ -22,26 +24,30 @@ export function CalibrationPage() {
   const [results, setResults] = useState<CalibrationResult[] | null>(null);
 
   const load = async () => {
-    const [s, h] = await Promise.all([fetchVarianceSummary(), fetchCalibrationHistory()]);
+    if (!firm) return;
+    const [s, h] = await Promise.all([fetchVarianceSummary(firm.id), fetchCalibrationHistory(firm.id)]);
     setSummary(s); setHistory(h);
   };
   useEffect(() => {
-    Promise.all([fetchRegions(), listBoqs()]).then(([rg, bq]) => {
+    if (!firm) return;
+    Promise.all([fetchRegions(firm.id), listBoqs(firm.id)]).then(([rg, bq]) => {
       setRegions(rg); setBoqs(bq);
       setRegionId((rg.find((r) => r.name === 'Mumbai') || rg[0])?.id || '');
     });
     load().catch(console.error);
-  }, []);
+    /* eslint-disable-next-line */
+  }, [firm?.id]);
 
   const onRun = async () => {
+    if (!firm || !user) return;
     setRunning(true); setResults(null);
-    try { const r = await runCalibration(regionId); setResults(r); await load(); }
+    try { const r = await runCalibration(regionId, firm.id, user.id); setResults(r); await load(); }
     catch (e) { alert('Calibration failed: ' + (e as any).message); } finally { setRunning(false); }
   };
   const onReconcile = async () => {
-    if (!boqs[0]) return;
+    if (!boqs[0] || !firm) return;
     setReconciling(true);
-    try { await reconcileBoqFromActuals((boqs[0] as any).id, regionId); await load(); }
+    try { await reconcileBoqFromActuals((boqs[0] as any).id, regionId, firm.id); await load(); }
     catch (e) { alert('Reconcile failed: ' + (e as any).message); } finally { setReconciling(false); }
   };
 

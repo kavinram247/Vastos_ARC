@@ -3,7 +3,7 @@
 // VERSIONED (new rate_cards row, valid_from today) to preserve audit history;
 // resolve_rate() / the latest-by-valid_from query always returns the current rate.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 export interface SkuRow { sku_id: string; brand: string | null; grade: string; current_rate: number | null }
 export interface MaterialRow {
@@ -11,7 +11,7 @@ export interface MaterialRow {
   waste_factor: number; gst_rate: number; skus: SkuRow[];
 }
 
-export async function fetchMaterialRows(firmId = DEMO_FIRM_ID): Promise<MaterialRow[]> {
+export async function fetchMaterialRows(firmId: string): Promise<MaterialRow[]> {
   const [{ data: cats, error: ec }, { data: products, error: ep }, { data: skus, error: es }, { data: rates, error: er }] = await Promise.all([
     supabase.from('catalog_categories').select('id,name,path'),
     supabase.from('catalog_products').select('id,name,category_id,base_uom,waste_factor,gst_rate').order('name'),
@@ -41,7 +41,7 @@ export async function fetchMaterialRows(firmId = DEMO_FIRM_ID): Promise<Material
   }));
 }
 
-export async function saveMaterialRate(skuId: string, rate: number, firmId = DEMO_FIRM_ID) {
+export async function saveMaterialRate(skuId: string, rate: number, firmId: string) {
   const { error } = await supabase.from('rate_cards').insert({
     firm_id: firmId, sku_id: skuId, region_id: null, rate, valid_from: new Date().toISOString().slice(0, 10), source: 'manual',
   } as any);
@@ -55,7 +55,7 @@ export async function saveProductWaste(productId: string, waste: number) {
 
 export interface LabourRow { activity_id: string; code: string; name: string; base_uom: string; trade: string | null; current_rate: number | null }
 
-export async function fetchLabourRows(firmId = DEMO_FIRM_ID): Promise<LabourRow[]> {
+export async function fetchLabourRows(firmId: string): Promise<LabourRow[]> {
   const [{ data: acts, error: ea }, { data: rates, error: er }] = await Promise.all([
     supabase.from('labour_activities').select('id,code,name,base_uom,trade').order('trade'),
     supabase.from('rate_cards').select('labour_activity_id,rate,valid_from').eq('firm_id', firmId).is('region_id', null).not('labour_activity_id', 'is', null).order('valid_from', { ascending: false }),
@@ -69,7 +69,7 @@ export async function fetchLabourRows(firmId = DEMO_FIRM_ID): Promise<LabourRow[
   }));
 }
 
-export async function saveLabourRate(activityId: string, rate: number, firmId = DEMO_FIRM_ID) {
+export async function saveLabourRate(activityId: string, rate: number, firmId: string) {
   const { error } = await supabase.from('rate_cards').insert({
     firm_id: firmId, labour_activity_id: activityId, region_id: null, rate, valid_from: new Date().toISOString().slice(0, 10), source: 'manual',
   } as any);
@@ -77,7 +77,7 @@ export async function saveLabourRate(activityId: string, rate: number, firmId = 
 }
 
 export interface MarginRow { id: string; target_margin_pct: number; margin_floor_pct: number; overhead_pct: number }
-export async function fetchMargin(firmId = DEMO_FIRM_ID): Promise<MarginRow | null> {
+export async function fetchMargin(firmId: string): Promise<MarginRow | null> {
   const { data, error } = await supabase.from('margin_policies').select('id,target_margin_pct,margin_floor_pct,overhead_pct')
     .eq('firm_id', firmId).is('category_id', null).is('grade', null).limit(1);
   if (error) throw error;
@@ -89,7 +89,7 @@ export async function saveMargin(id: string, m: { target_margin_pct: number; mar
   if (error) throw error;
 }
 /** Fetch the firm-wide default margin policy, creating a sensible default if none exists (self-heals after a data reset). */
-export async function ensureMargin(firmId = DEMO_FIRM_ID): Promise<MarginRow | null> {
+export async function ensureMargin(firmId: string): Promise<MarginRow | null> {
   const existing = await fetchMargin(firmId);
   if (existing) return existing;
   const row: any = {
@@ -105,7 +105,7 @@ export async function ensureMargin(firmId = DEMO_FIRM_ID): Promise<MarginRow | n
 }
 
 export interface RegionAdminRow { id: string; name: string; material_index: number; labour_index: number; logistics_index: number; availability_risk: number }
-export async function fetchRegionAdmin(firmId = DEMO_FIRM_ID): Promise<RegionAdminRow[]> {
+export async function fetchRegionAdmin(firmId: string): Promise<RegionAdminRow[]> {
   const { data, error } = await supabase.from('regions').select('id,name,material_index,labour_index,logistics_index,availability_risk').eq('firm_id', firmId).order('name');
   if (error) throw error;
   return (data as any[]).map((r) => ({
@@ -164,7 +164,7 @@ export async function saveTemplateMeta(id: string, data: { name: string; descrip
   if (error) throw error;
 }
 
-export async function createTemplateFull(data: { code: string; name: string; category: string; description: string; param_schema: any; derived_vars: any[] }, firmId = DEMO_FIRM_ID): Promise<string> {
+export async function createTemplateFull(data: { code: string; name: string; category: string; description: string; param_schema: any; derived_vars: any[] }, firmId: string): Promise<string> {
   const { data: row, error } = await supabase.from('module_templates')
     .insert({ ...data, firm_id: firmId, is_active: true } as any).select('id').single();
   if (error) throw error;

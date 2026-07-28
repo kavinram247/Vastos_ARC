@@ -25,7 +25,10 @@ export function QuotationsPage() {
   const [sharing, setSharing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
-  useEffect(() => { listBoqs().then((b) => { setBoqs(b); if (b[0]) setSelId((b[0] as any).id); }).catch(console.error); }, []);
+  useEffect(() => {
+    if (!firm) return;
+    listBoqs(firm.id).then((b) => { setBoqs(b); if (b[0]) setSelId((b[0] as any).id); }).catch(console.error);
+  }, [firm?.id]);
   useEffect(() => {
     if (!selId) return;
     setLoadingDetail(true); setSavedNo(null);
@@ -45,7 +48,7 @@ export function QuotationsPage() {
   ];
 
   const onSave = async () => {
-    if (!detail) return;
+    if (!detail || !firm) return;
     setSaving(true);
     try {
       let payload: any;
@@ -53,13 +56,13 @@ export function QuotationsPage() {
       else if (tab === 'costing' && cost) payload = { docType: 'internal_costing', subtotal: cost.sell, gst_amount: 0, total_amount: cost.sell, snapshot: cost };
       else if (tab === 'procurement' && proc) payload = { docType: 'procurement', subtotal: proc.total, gst_amount: 0, total_amount: proc.total, snapshot: proc };
       else payload = { docType: 'vendor_rfq', subtotal: 0, gst_amount: 0, total_amount: 0, snapshot: { rows: rfq } };
-      const res = await saveQuotation({ boqId: detail.id, ...payload });
+      const res = await saveQuotation({ boqId: detail.id, ...payload }, firm.id);
       setSavedNo(res.quotation_number);
     } catch (e) { alert('Save failed: ' + (e as any).message); } finally { setSaving(false); }
   };
 
   const shareWithClient = async () => {
-    if (!detail || !cust) return;
+    if (!detail || !cust || !firm) return;
     setSharing(true);
     try {
       const res = await saveQuotation({
@@ -67,7 +70,7 @@ export function QuotationsPage() {
         design_fees: charges.design_fees, supervision_fees: charges.supervision_fees,
         other_charges: charges.other_charges, discount_pct: charges.discount_pct,
         subtotal: cust.taxable, gst_amount: cust.gst, total_amount: cust.grand_total, snapshot: cust,
-      });
+      }, firm.id);
       const url = `${window.location.origin}${window.location.pathname}?quote=${res.share_token}`;
       setShareUrl(url);
       try { await navigator.clipboard.writeText(url); } catch { /* clipboard may be blocked */ }

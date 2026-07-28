@@ -24,7 +24,14 @@ export function MarketingConnectPage({ onNavigate }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const reload = () => fetchMarketingData(firm?.id).then(d => { setData(d); setLoading(false); });
+  // firm.id is required: passing undefined used to fall through to the demo
+  // tenant's default, so an unresolved session read firm 1111…'s data. (H3)
+  const reload = async () => {
+    if (!firm) return;
+    const d = await fetchMarketingData(firm.id);
+    setData(d);
+    setLoading(false);
+  };
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [firm?.id]);
 
   if (!user || !firm) return null;

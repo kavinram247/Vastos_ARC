@@ -258,13 +258,13 @@ begin
     'stock_movements','inventory_item_settings','inventory_alerts','inventory_outbox'
   ] loop
     execute format(
-      'drop policy if exists %I on %I; create policy %I on %I for select using (firm_id = current_firm_id() or current_firm_id() is null);',
+      'drop policy if exists %I on %I; create policy %I on %I for select to authenticated using (firm_id = current_firm_id());',
       t||'_sel', t, t||'_sel', t);
   end loop;
 end $$;
 
-grant select on stock_movements, inventory_item_settings, inventory_alerts, inventory_outbox, stock_balances to anon, authenticated;
-grant execute on function inv_next_number(uuid, text, text) to anon, authenticated;
-grant execute on function inv_current_actor() to anon, authenticated;
-grant execute on function inv_require(text, text) to anon, authenticated;
-grant execute on function inv_to_base(uuid, numeric, uom) to anon, authenticated;
+grant select on stock_movements, inventory_item_settings, inventory_alerts, inventory_outbox, stock_balances to authenticated;
+grant execute on function inv_next_number(uuid, text, text) to authenticated;
+grant execute on function inv_current_actor() to authenticated;
+grant execute on function inv_require(text, text) to authenticated;
+grant execute on function inv_to_base(uuid, numeric, uom) to authenticated;

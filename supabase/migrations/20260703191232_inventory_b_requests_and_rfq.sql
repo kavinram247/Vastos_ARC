@@ -138,8 +138,8 @@ begin
   ] loop
     execute format('alter table %I enable row level security;', t);
     execute format(
-      'drop policy if exists %I on %I; create policy %I on %I for select using (firm_id = current_firm_id() or current_firm_id() is null);',
+      'drop policy if exists %I on %I; create policy %I on %I for select to authenticated using (firm_id = current_firm_id());',
       t||'_sel', t, t||'_sel', t);
-    execute format('grant select on %I to anon, authenticated;', t);
+    execute format('grant select on %I to authenticated;', t);
   end loop;
 end $$;

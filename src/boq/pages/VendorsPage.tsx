@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -63,6 +64,7 @@ const statusVariant = (s: string) =>
 const UNCATEGORIZED = 'Unlisted — no materials linked';
 
 function DirectoryTab() {
+  const { firm } = useAuth();
   const [entries, setEntries] = useState<VendorDirectoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -71,8 +73,11 @@ function DirectoryTab() {
   const [adding, setAdding] = useState(false);
   const [managing, setManaging] = useState<VendorDirectoryEntry | null>(null);
 
-  const load = () => fetchVendorDirectory().then((e) => { setEntries(e); setLoading(false); }).catch((err) => { console.error(err); setLoading(false); });
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    if (!firm) return;
+    fetchVendorDirectory(firm.id).then((e) => { setEntries(e); setLoading(false); }).catch((err) => { console.error(err); setLoading(false); });
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [firm?.id]);
 
   // group vendors by the service they provide (derived). A vendor that supplies across
   // categories appears under each heading; vendors with nothing linked fall back to
@@ -196,6 +201,7 @@ function VendorCard({ v, onEdit, onManage }: { v: VendorDirectoryEntry; onEdit: 
 }
 
 function ManageMaterialsModal({ vendor, onClose, onChanged }: { vendor: VendorDirectoryEntry; onClose: () => void; onChanged: () => void }) {
+  const { firm } = useAuth();
   const [links, setLinks] = useState<VendorSkuLink[]>([]);
   const [allSkus, setAllSkus] = useState<SkuOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,36 +214,39 @@ function ManageMaterialsModal({ vendor, onClose, onChanged }: { vendor: VendorDi
   const [newLead, setNewLead] = useState('7');
 
   const reload = async () => {
-    const ls = await fetchVendorSkuLinks(vendor.id);
+    if (!firm) return;
+    const ls = await fetchVendorSkuLinks(vendor.id, firm.id);
     setLinks(ls);
     onChanged(); // refresh the directory grouping/chips behind the modal
   };
 
   useEffect(() => {
-    Promise.all([fetchVendorSkuLinks(vendor.id), fetchAllSkus()])
+    if (!firm) return;
+    Promise.all([fetchVendorSkuLinks(vendor.id, firm.id), fetchAllSkus()])
       .then(([ls, skus]) => { setLinks(ls); setAllSkus(skus); setLoading(false); })
       .catch((e) => { console.error(e); setLoading(false); });
-  }, [vendor.id]);
+  }, [vendor.id, firm?.id]);
 
   const linkedIds = new Set(links.map((l) => l.sku_id));
   const available = allSkus.filter((s) => !linkedIds.has(s.sku_id));
 
   const onAdd = async () => {
     const price = parseFloat(newPrice);
-    if (!newSku || !(price >= 0)) return;
+    if (!newSku || !(price >= 0) || !firm) return;
     setBusy(true);
     try {
       await addVendorSku(vendor.id, newSku, {
         price, moq: newMoq.trim() ? parseFloat(newMoq) : null, lead_time_days: parseInt(newLead) || 7,
-      });
+      }, firm.id);
       setNewSku(''); setNewPrice(''); setNewMoq(''); setNewLead('7');
       await reload();
     } catch (e) { alert('Add failed: ' + (e as any).message); } finally { setBusy(false); }
   };
 
   const onRemove = async (skuId: string) => {
+    if (!firm) return;
     setBusy(true);
-    try { await removeVendorSku(vendor.id, skuId); await reload(); }
+    try { await removeVendorSku(vendor.id, skuId, firm.id); await reload(); }
     catch (e) { alert('Remove failed: ' + (e as any).message); } finally { setBusy(false); }
   };
 
@@ -335,6 +344,7 @@ function LinkRow({ link, onSaved, onRemove, disabled }: { link: VendorSkuLink; o
 }
 
 function VendorFormModal({ vendor, onClose, onSaved }: { vendor: VendorDirectoryEntry | null; onClose: () => void; onSaved: () => void }) {
+  const { user, firm } = useAuth();
   const [form, setForm] = useState<VendorInput>({
     id: vendor?.id,
     company_name: vendor?.company_name ?? '',
@@ -349,9 +359,9 @@ function VendorFormModal({ vendor, onClose, onSaved }: { vendor: VendorDirectory
   const set = (patch: Partial<VendorInput>) => setForm((f) => ({ ...f, ...patch }));
 
   const submit = async () => {
-    if (!form.company_name.trim()) return;
+    if (!form.company_name.trim() || !firm || !user) return;
     setSaving(true);
-    try { await saveVendor(form); onSaved(); }
+    try { await saveVendor(form, firm.id, user.id); onSaved(); }
     catch (e) { alert('Save failed: ' + (e as any).message); }
     finally { setSaving(false); }
   };
@@ -401,13 +411,21 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 }
 
 function VendorsTab() {
+  const { firm } = useAuth();
   const [vendors, setVendors] = useState<VendorWithScore[]>([]);
   const [loading, setLoading] = useState(true);
   const [recomputing, setRecomputing] = useState(false);
-  const load = () => fetchVendorsWithScores().then((v) => { setVendors(v.sort((a, b) => (b.score?.overall || 0) - (a.score?.overall || 0))); setLoading(false); }).catch(console.error);
-  useEffect(() => { load(); }, []);
-  const recompute = async () => { setRecomputing(true); try { await recomputeAndPersistScores(); await load(); } finally { setRecomputing(false); } };
-  if (loading) return <Loading />;
+  const load = () => {
+    if (!firm) return Promise.resolve();
+    return fetchVendorsWithScores(firm.id).then((v) => { setVendors(v.sort((a, b) => (b.score?.overall || 0) - (a.score?.overall || 0))); setLoading(false); }).catch(console.error);
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [firm?.id]);
+  const recompute = async () => {
+    if (!firm) return;
+    setRecomputing(true);
+    try { await recomputeAndPersistScores(firm.id); await load(); } finally { setRecomputing(false); }
+  };
+  if (!firm || loading) return <Loading />;
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -447,15 +465,19 @@ function VendorsTab() {
 }
 
 function CompareTab() {
+  const { firm } = useAuth();
   const [skus, setSkus] = useState<{ sku_id: string; label: string }[]>([]);
   const [skuId, setSkuId] = useState('');
   const [priority, setPriority] = useState<Priority>('balanced');
   const [ranked, setRanked] = useState<RankedVendor[]>([]);
-  useEffect(() => { listVendorSkus().then((s) => { setSkus(s); if (s[0]) setSkuId(s[0].sku_id); }).catch(console.error); }, []);
   useEffect(() => {
-    if (!skuId) return;
-    fetchCandidatesForSku(skuId).then((c) => setRanked(rankVendors(c, priority, 100, null))).catch(console.error);
-  }, [skuId, priority]);
+    if (!firm) return;
+    listVendorSkus(firm.id).then((s) => { setSkus(s); if (s[0]) setSkuId(s[0].sku_id); }).catch(console.error);
+  }, [firm?.id]);
+  useEffect(() => {
+    if (!skuId || !firm) return;
+    fetchCandidatesForSku(skuId, firm.id).then((c) => setRanked(rankVendors(c, priority, 100, null))).catch(console.error);
+  }, [skuId, priority, firm?.id]);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
@@ -488,6 +510,7 @@ function CompareTab() {
 }
 
 function POTab() {
+  const { firm } = useAuth();
   const [boqs, setBoqs] = useState<any[]>([]);
   const [boqId, setBoqId] = useState('');
   const [priority, setPriority] = useState<Priority>('balanced');
@@ -496,13 +519,16 @@ function POTab() {
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState<Record<string, string>>({});
 
-  useEffect(() => { listBoqs().then((b) => { setBoqs(b); if (b[0]) setBoqId((b[0] as any).id); }).catch(console.error); }, []);
+  useEffect(() => {
+    if (!firm) return;
+    listBoqs(firm.id).then((b) => { setBoqs(b); if (b[0]) setBoqId((b[0] as any).id); }).catch(console.error);
+  }, [firm?.id]);
 
   useEffect(() => {
-    if (!boqId) return;
+    if (!boqId || !firm) return;
     setLoading(true); setGenerated({});
     (async () => {
-      const [rows, candMap] = await Promise.all([fetchProcurementForBoq(boqId), fetchCandidateMap()]);
+      const [rows, candMap] = await Promise.all([fetchProcurementForBoq(boqId), fetchCandidateMap(firm.id)]);
       const byVendor = new Map<string, { vendor_id: string; company_name: string; lines: any[]; total: number }>();
       const noVendor: any[] = [];
       for (const r of rows) {
@@ -519,10 +545,11 @@ function POTab() {
       setUnmatched(noVendor);
       setLoading(false);
     })().catch((e) => { console.error(e); setLoading(false); });
-  }, [boqId, priority]);
+  }, [boqId, priority, firm?.id]);
 
   const createPO = async (g: any) => {
-    try { const no = await generatePO(boqId, g.vendor_id, g.lines); setGenerated((p) => ({ ...p, [g.vendor_id]: no })); }
+    if (!firm) return;
+    try { const no = await generatePO(boqId, g.vendor_id, g.lines, firm.id); setGenerated((p) => ({ ...p, [g.vendor_id]: no })); }
     catch (e) { alert('PO failed: ' + (e as any).message); }
   };
 

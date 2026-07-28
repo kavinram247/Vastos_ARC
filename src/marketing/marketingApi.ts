@@ -1,7 +1,7 @@
 // Marketing data access — direct Supabase reads (mirrors boq/*Api.ts). Marketing
 // data is analytical/high-volume, so it is fetched on demand here rather than
 // hydrated into the global CRM store.
-import { supabase, DEMO_FIRM_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import type { MarketingDataset, AdInsight, Attribution } from './types';
 
 const sb = supabase as any;
@@ -20,7 +20,7 @@ function coerceAttribution(rows: any[]): Attribution[] {
 }
 
 /** Fetch the full marketing dataset for a firm (filtering happens client-side). */
-export async function fetchMarketingData(firmId = DEMO_FIRM_ID): Promise<MarketingDataset> {
+export async function fetchMarketingData(firmId: string): Promise<MarketingDataset> {
   const q = (t: string) => sb.from(t).select('*').eq('firm_id', firmId);
   const [accounts, campaigns, adSets, ads, insights, adLeads, attribution, syncRuns] = await Promise.all([
     q('crm_ad_accounts').order('created_at', { ascending: true }),

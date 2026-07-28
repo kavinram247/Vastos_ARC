@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // Quotation data access — load a saved BOQ in full, persist quotation projections.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import type { BoqDetail, BoqDetailLine } from './engine/documents';
 
 export async function fetchBoqDetail(boqId: string): Promise<BoqDetail> {
@@ -53,7 +53,7 @@ export interface SaveQuotationInput {
 
 export interface SavedQuotation { id: string; quotation_number: string; share_token: string }
 
-export async function saveQuotation(input: SaveQuotationInput, firmId = DEMO_FIRM_ID): Promise<SavedQuotation> {
+export async function saveQuotation(input: SaveQuotationInput, firmId: string): Promise<SavedQuotation> {
   const number = await nextQuotationNumber(firmId);
   const { data, error } = await supabase.from('quotations').insert({
     firm_id: firmId, boq_id: input.boqId, boq_version: input.boqVersion ?? 1,
@@ -67,7 +67,7 @@ export async function saveQuotation(input: SaveQuotationInput, firmId = DEMO_FIR
   return data as any as SavedQuotation;
 }
 
-export async function listQuotations(firmId = DEMO_FIRM_ID) {
+export async function listQuotations(firmId: string) {
   const { data, error } = await supabase.from('quotations')
     .select('id,quotation_number,doc_type,total_amount,status,created_at,boq_id')
     .eq('firm_id', firmId).order('created_at', { ascending: false });

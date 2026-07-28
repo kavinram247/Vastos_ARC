@@ -58,10 +58,12 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
   const [vendorViewers, setVendorViewers] = useState<Set<string> | null>(null);
   const [showVendorAccess, setShowVendorAccess] = useState(false);
 
-  const loadVendorViewers = () => listVendorViewers()
-    .then(setVendorViewers)
-    .catch((e) => { console.error(e); setVendorViewers(new Set()); });
-  useEffect(() => { loadVendorViewers(); }, []);
+  const loadVendorViewers = async () => {
+    if (!firm) return;
+    try { setVendorViewers(await listVendorViewers(firm.id)); }
+    catch (e) { console.error(e); setVendorViewers(new Set()); }
+  };
+  useEffect(() => { loadVendorViewers(); /* eslint-disable-next-line */ }, [firm?.id]);
 
   if (!user || !firm) return null;
 
@@ -642,6 +644,7 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
           staff={data.profiles.filter(p => p.role === 'architect' || p.role === 'engineer')}
           viewers={vendorViewers ?? new Set()}
           grantedBy={user.id}
+          firmId={firm.id}
           onClose={() => setShowVendorAccess(false)}
           onChanged={loadVendorViewers}
         />
@@ -651,15 +654,16 @@ export function ProjectDetailPage({ projectId, onNavigate }: Props) {
 }
 
 // ═══ VENDOR VISIBILITY (allow-list) MODAL ═══
-function VendorAccessModal({ staff, viewers, grantedBy, onClose, onChanged }: {
+function VendorAccessModal({ staff, viewers, grantedBy, firmId, onClose, onChanged }: {
   staff: { id: string; full_name: string; role: string }[];
-  viewers: Set<string>; grantedBy: string; onClose: () => void; onChanged: () => void;
+  viewers: Set<string>; grantedBy: string; firmId: string;
+  onClose: () => void; onChanged: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
 
   const toggle = async (id: string, name: string, granted: boolean) => {
     setBusy(id);
-    try { await setVendorViewer(id, name, granted, grantedBy); onChanged(); }
+    try { await setVendorViewer(id, name, granted, grantedBy, firmId); onChanged(); }
     catch (e) { alert('Failed: ' + (e as any).message); } finally { setBusy(null); }
   };
 

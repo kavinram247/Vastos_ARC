@@ -2,14 +2,14 @@
 // BOQ data access — fetches catalog/rules from Supabase and assembles
 // the deterministic engine's PricingContext. All Supabase I/O lives here.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import type {
   PricingContext, TemplateDef, RuleDef, ProductInfo, MaterialRate, Grade, RegionIndices, MarginPolicy,
 } from './engine/estimator';
 
 export interface RegionRow { id: string; name: string; material_index: number; labour_index: number; logistics_index: number; availability_risk: number }
 
-export async function fetchRegions(firmId = DEMO_FIRM_ID): Promise<RegionRow[]> {
+export async function fetchRegions(firmId: string): Promise<RegionRow[]> {
   const { data, error } = await supabase
     .from('regions').select('id,name,material_index,labour_index,logistics_index,availability_risk')
     .eq('firm_id', firmId).order('name');
@@ -40,7 +40,7 @@ export async function fetchTemplates(): Promise<TemplateRow[]> {
 }
 
 /** Build the full pricing context (rates, products, region, margin) for a firm/region. */
-export async function fetchPricingContext(regionId: string | null, firmId = DEMO_FIRM_ID): Promise<PricingContext> {
+export async function fetchPricingContext(regionId: string | null, firmId: string): Promise<PricingContext> {
   const [
     { data: products, error: ep },
     { data: skus, error: es },
@@ -109,7 +109,7 @@ export async function fetchPricingContext(regionId: string | null, firmId = DEMO
 
 // ── Persistence ──────────────────────────────────────────────
 export interface SaveBoqInput {
-  firmId?: string;
+  firmId: string;
   title: string;
   regionId: string | null;
   sections: { name: string; lines: any[] }[];
@@ -117,7 +117,7 @@ export interface SaveBoqInput {
 }
 
 export async function saveBoq(input: SaveBoqInput): Promise<string> {
-  const firmId = input.firmId || DEMO_FIRM_ID;
+  const firmId = input.firmId;
   const { data: doc, error: e1 } = await supabase.from('boq_documents').insert({
     firm_id: firmId, title: input.title, status: 'draft', region_id: input.regionId,
     total_cost_price: input.totals.cost_price, total_selling_price: input.totals.selling_price,
@@ -152,7 +152,7 @@ export async function saveBoq(input: SaveBoqInput): Promise<string> {
   return boqId;
 }
 
-export async function listBoqs(firmId = DEMO_FIRM_ID) {
+export async function listBoqs(firmId: string) {
   const { data, error } = await supabase.from('boq_documents')
     .select('id,title,status,grand_total,total_cost_price,margin_pct,created_at')
     .eq('firm_id', firmId).order('created_at', { ascending: false });

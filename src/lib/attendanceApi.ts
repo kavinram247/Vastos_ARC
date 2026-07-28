@@ -3,7 +3,7 @@
 // check-in / check-out timestamps + device GPS. Self check-in/out and owner
 // override. References the legacy in-memory profile id as TEXT.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from './supabase';
+import { supabase } from './supabase';
 
 export type AttendanceStatus = 'present' | 'absent' | 'leave' | 'half_day';
 
@@ -48,7 +48,7 @@ export function mapsUrl(lat: number, lng: number): string {
 const today = () => new Date().toISOString().slice(0, 10);
 const SELECT = 'id,user_id,user_name,work_date,status,check_in_at,check_in_lat,check_in_lng,check_in_accuracy,check_in_label,check_out_at,check_out_lat,check_out_lng,check_out_accuracy,check_out_label,notes,marked_by';
 
-export async function listAttendance(opts: { from?: string; to?: string; userId?: string } = {}, firmId = DEMO_FIRM_ID): Promise<AttendanceRecord[]> {
+export async function listAttendance(opts: { from?: string; to?: string; userId?: string } = {}, firmId: string): Promise<AttendanceRecord[]> {
   let q = supabase.from('attendance_records').select(SELECT).eq('firm_id', firmId);
   if (opts.from) q = q.gte('work_date', opts.from);
   if (opts.to) q = q.lte('work_date', opts.to);
@@ -59,7 +59,7 @@ export async function listAttendance(opts: { from?: string; to?: string; userId?
 }
 
 /** Today's record for a user, or null. */
-export async function getTodayRecord(userId: string, firmId = DEMO_FIRM_ID): Promise<AttendanceRecord | null> {
+export async function getTodayRecord(userId: string, firmId: string): Promise<AttendanceRecord | null> {
   const { data, error } = await supabase.from('attendance_records').select(SELECT)
     .eq('firm_id', firmId).eq('user_id', userId).eq('work_date', today()).maybeSingle();
   if (error) throw error;
@@ -67,7 +67,7 @@ export async function getTodayRecord(userId: string, firmId = DEMO_FIRM_ID): Pro
 }
 
 export async function checkIn(
-  user: { id: string; name: string }, geo: GeoFix | null, label: string | null, markedBy: string, firmId = DEMO_FIRM_ID,
+  user: { id: string; name: string }, geo: GeoFix | null, label: string | null, markedBy: string, firmId: string,
 ): Promise<void> {
   const { error } = await supabase.from('attendance_records').upsert({
     firm_id: firmId, user_id: user.id, user_name: user.name, work_date: today(), status: 'present',
@@ -101,7 +101,7 @@ export interface ManualAttendanceInput {
 }
 
 /** Owner create/correct a record (backfill). Upserts on (firm,user,date). */
-export async function saveManualAttendance(input: ManualAttendanceInput, markedBy: string, firmId = DEMO_FIRM_ID): Promise<void> {
+export async function saveManualAttendance(input: ManualAttendanceInput, markedBy: string, firmId: string): Promise<void> {
   const row = {
     firm_id: firmId, user_id: input.user_id, user_name: input.user_name, work_date: input.work_date,
     status: input.status, check_in_at: input.check_in_at || null, check_out_at: input.check_out_at || null,

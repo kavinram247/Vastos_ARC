@@ -9,7 +9,6 @@ import type {
 } from '../types';
 import type { DashboardLayout } from '../leads/dashboard/types';
 import { firms as initialFirms } from './mockData';
-import { DEMO_FIRM_ID } from '../lib/supabase';
 import * as crm from '../lib/crmApi';
 
 function clone<T>(data: T): T {
@@ -21,8 +20,9 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 
 // Supabase-backed store. Reads stay synchronous (hydrated into in-memory arrays
 // on init); mutations update locally + notify immediately, then write through to
-// Supabase. The firm record stays a local seed (id = DEMO_FIRM_ID); all entity
-// data lives in the crm_ tables.
+// Supabase. The firm record stays a local seed; all entity data lives in the
+// crm_ tables. hydrate() takes the firm id from the session — there is no
+// ambient demo-tenant default any more (audit H3).
 class DataStore {
   firms: Firm[] = clone(initialFirms);
   profiles: Profile[] = [];
@@ -95,7 +95,7 @@ class DataStore {
   }
 
   // ─── Hydration (idempotent) ───
-  hydrate(firmId = DEMO_FIRM_ID): Promise<void> {
+  hydrate(firmId: string): Promise<void> {
     if (this.loaded) return Promise.resolve();
     if (this.hydrating) return this.hydrating;
     this.hydrating = crm.hydrateAll(firmId).then((d) => {

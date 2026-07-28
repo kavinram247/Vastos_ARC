@@ -3,17 +3,17 @@
 // is hidden from non-owner staff unless the owner has granted them access.
 // Firm-wide; references the legacy in-memory profile id as TEXT.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID } from './supabase';
+import { supabase } from './supabase';
 
 /** Set of user ids the owner has granted "can see project vendors" access. */
-export async function listVendorViewers(firmId = DEMO_FIRM_ID): Promise<Set<string>> {
+export async function listVendorViewers(firmId: string): Promise<Set<string>> {
   const { data, error } = await supabase.from('vendor_visibility_grants').select('user_id').eq('firm_id', firmId);
   if (error) throw error;
   return new Set(((data || []) as any[]).map((r) => r.user_id));
 }
 
 export async function setVendorViewer(
-  userId: string, userName: string, granted: boolean, grantedBy: string, firmId = DEMO_FIRM_ID,
+  userId: string, userName: string, granted: boolean, grantedBy: string, firmId: string,
 ): Promise<void> {
   if (granted) {
     const { error } = await supabase.from('vendor_visibility_grants')

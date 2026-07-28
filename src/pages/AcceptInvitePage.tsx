@@ -43,8 +43,12 @@ export function AcceptInvitePage({ token }: Props) {
     setError('');
     setSaving(true);
 
-    // Use edge function with admin API — creates confirmed user without sending any email
-    const res = await fetch(`${(import.meta as any).env?.VITE_SUPABASE_URL ?? 'https://weckowkvqpamnlcqwvfh.supabase.co'}/functions/v1/accept-invite`, {
+    // Use edge function with admin API — creates confirmed user without sending any email.
+    // No hardcoded fallback (audit H5): the previous `?? 'https://weckowkv….supabase.co'`
+    // meant a misconfigured build redeemed invites against PRODUCTION regardless of which
+    // project the rest of the app was pointed at. src/lib/supabase.ts already throws when
+    // this is unset, so reaching here without it is not a reachable state.
+    const res = await fetch(`${(import.meta as any).env?.VITE_SUPABASE_URL}/functions/v1/accept-invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password }),

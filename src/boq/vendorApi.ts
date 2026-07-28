@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // Vendor intelligence data access — scores, comparison, PO generation.
 // ─────────────────────────────────────────────────────────────
-import { supabase, DEMO_FIRM_ID, DEMO_USER_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { computeVendorScore, type VendorScore, type VendorCandidate, type PerfRow } from './engine/vendorScore';
 import { procurementView } from './engine/documents';
 import { fetchBoqDetail } from './quotationApi';
@@ -11,7 +11,7 @@ export interface VendorWithScore {
   category: string | null; status: string; score: VendorScore | null;
 }
 
-export async function fetchVendorsWithScores(firmId = DEMO_FIRM_ID): Promise<VendorWithScore[]> {
+export async function fetchVendorsWithScores(firmId: string): Promise<VendorWithScore[]> {
   const [{ data: vendors, error: ev }, { data: perf, error: ep }] = await Promise.all([
     supabase.from('vendors').select('id,company_name,contact_person,phone,category,status').eq('firm_id', firmId).order('company_name'),
     supabase.from('vendor_performance').select('vendor_id,promised_days,actual_days,qty_ordered,qty_defective,price_at_order,market_price,recorded_at').eq('firm_id', firmId),
@@ -30,7 +30,7 @@ export async function fetchVendorsWithScores(firmId = DEMO_FIRM_ID): Promise<Ven
 }
 
 /** Recompute scores from performance and persist to the vendors denormalized columns. */
-export async function recomputeAndPersistScores(firmId = DEMO_FIRM_ID): Promise<number> {
+export async function recomputeAndPersistScores(firmId: string): Promise<number> {
   const vendors = await fetchVendorsWithScores(firmId);
   let n = 0;
   for (const v of vendors) {
@@ -46,7 +46,7 @@ export async function recomputeAndPersistScores(firmId = DEMO_FIRM_ID): Promise<
 }
 
 /** Vendors that sell a given SKU, with price/lead/MOQ + their score → candidates for ranking. */
-export async function fetchCandidatesForSku(skuId: string, firmId = DEMO_FIRM_ID): Promise<VendorCandidate[]> {
+export async function fetchCandidatesForSku(skuId: string, firmId: string): Promise<VendorCandidate[]> {
   const { data: vs, error } = await supabase.from('vendor_skus')
     .select('vendor_id,price,moq,lead_time_days,vendors(company_name)').eq('firm_id', firmId).eq('sku_id', skuId);
   if (error) throw error;
@@ -60,7 +60,7 @@ export async function fetchCandidatesForSku(skuId: string, firmId = DEMO_FIRM_ID
 }
 
 /** All vendor offers keyed by sku_id, with scores attached — for the PO recommendation flow. */
-export async function fetchCandidateMap(firmId = DEMO_FIRM_ID): Promise<Map<string, VendorCandidate[]>> {
+export async function fetchCandidateMap(firmId: string): Promise<Map<string, VendorCandidate[]>> {
   const [{ data: vs, error }, scored] = await Promise.all([
     supabase.from('vendor_skus').select('vendor_id,sku_id,price,moq,lead_time_days,vendors(company_name)').eq('firm_id', firmId),
     fetchVendorsWithScores(firmId),
@@ -80,7 +80,7 @@ export async function fetchCandidateMap(firmId = DEMO_FIRM_ID): Promise<Map<stri
   return map;
 }
 
-export async function listVendorSkus(firmId = DEMO_FIRM_ID) {
+export async function listVendorSkus(firmId: string) {
   const { data, error } = await supabase.from('vendor_skus')
     .select('sku_id, product_skus(sku_code, brand, products:catalog_products(name))').eq('firm_id', firmId);
   if (error) throw error;
@@ -97,7 +97,7 @@ export async function listVendorSkus(firmId = DEMO_FIRM_ID) {
 export interface POLineInput { sku_id: string | null; description: string; uom: string; quantity: number; rate: number; amount: number }
 
 export async function generatePO(
-  boqId: string, vendorId: string, lines: POLineInput[], firmId = DEMO_FIRM_ID,
+  boqId: string, vendorId: string, lines: POLineInput[], firmId: string,
 ): Promise<string> {
   const { count } = await supabase.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('firm_id', firmId);
   const poNumber = `PO-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`;
@@ -148,7 +148,7 @@ function deriveGroup(path: string, pathToName: Map<string, string>, leafName: st
   return pathToName.get(groupPath) ?? pathToName.get(path) ?? leafName;
 }
 
-export async function fetchVendorDirectory(firmId = DEMO_FIRM_ID): Promise<VendorDirectoryEntry[]> {
+export async function fetchVendorDirectory(firmId: string): Promise<VendorDirectoryEntry[]> {
   const [{ data: vendors, error: ev }, { data: perf, error: ep }, { data: vskus, error: evs }, { data: cats, error: ec }] =
     await Promise.all([
       supabase.from('vendors').select('id,company_name,contact_person,phone,email,gstin,category,status').eq('firm_id', firmId).order('company_name'),
@@ -236,7 +236,7 @@ export interface SkuOption {
 export interface VendorSkuInput { price: number; moq: number | null; lead_time_days: number }
 
 /** The materials a vendor currently supplies (latest offer per SKU). */
-export async function fetchVendorSkuLinks(vendorId: string, firmId = DEMO_FIRM_ID): Promise<VendorSkuLink[]> {
+export async function fetchVendorSkuLinks(vendorId: string, firmId: string): Promise<VendorSkuLink[]> {
   const [{ data, error }, { data: cats, error: ec }] = await Promise.all([
     supabase.from('vendor_skus')
       .select('id, sku_id, price, moq, lead_time_days, valid_from, product_skus(sku_code, brand, catalog_products(name, category_id))')
@@ -284,7 +284,7 @@ export async function fetchAllSkus(): Promise<SkuOption[]> {
 }
 
 /** Link a SKU to a vendor (or update today's offer). valid_from defaults to today; unique on (vendor,sku,valid_from). */
-export async function addVendorSku(vendorId: string, skuId: string, input: VendorSkuInput, firmId = DEMO_FIRM_ID): Promise<void> {
+export async function addVendorSku(vendorId: string, skuId: string, input: VendorSkuInput, firmId: string): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const { data: existing, error: eq } = await supabase.from('vendor_skus')
     .select('id').eq('firm_id', firmId).eq('vendor_id', vendorId).eq('sku_id', skuId).eq('valid_from', today).maybeSingle();
@@ -308,14 +308,14 @@ export async function updateVendorSku(id: string, input: VendorSkuInput): Promis
 }
 
 /** Unlink a SKU from a vendor entirely (removes all dated offers). */
-export async function removeVendorSku(vendorId: string, skuId: string, firmId = DEMO_FIRM_ID): Promise<void> {
+export async function removeVendorSku(vendorId: string, skuId: string, firmId: string): Promise<void> {
   const { error } = await supabase.from('vendor_skus')
     .delete().eq('firm_id', firmId).eq('vendor_id', vendorId).eq('sku_id', skuId);
   if (error) throw error;
 }
 
 /** Insert a new vendor or update an existing one. Returns the vendor id. */
-export async function saveVendor(input: VendorInput, firmId = DEMO_FIRM_ID): Promise<string> {
+export async function saveVendor(input: VendorInput, firmId: string, createdBy: string): Promise<string> {
   const fields = {
     company_name: input.company_name.trim(),
     contact_person: input.contact_person?.trim() || null,
@@ -331,7 +331,7 @@ export async function saveVendor(input: VendorInput, firmId = DEMO_FIRM_ID): Pro
     return input.id;
   }
   const { data, error } = await supabase.from('vendors')
-    .insert({ firm_id: firmId, created_by: DEMO_USER_ID, ...fields } as any)
+    .insert({ firm_id: firmId, created_by: createdBy, ...fields } as any)
     .select('id').single();
   if (error) throw error;
   return (data as any).id;

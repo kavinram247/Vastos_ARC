@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
@@ -22,6 +23,7 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toStr
 const toEditLine = (l: EstimatedLine): EditLine => ({ ...l, uid: uid(), is_optional: false, source: 'engine' });
 
 export function BoqEstimatorPage() {
+  const { firm } = useAuth();
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [regions, setRegions] = useState<RegionRow[]>([]);
   const [regionId, setRegionId] = useState<string>('');
@@ -39,17 +41,20 @@ export function BoqEstimatorPage() {
   const [savedId, setSavedId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!firm) return;
     (async () => {
-      const [tpls, rgs] = await Promise.all([fetchTemplates(), fetchRegions()]);
+      const [tpls, rgs] = await Promise.all([fetchTemplates(), fetchRegions(firm.id)]);
       setTemplates(tpls); setRegions(rgs);
       const mumbai = rgs.find((r) => r.name === 'Mumbai') || rgs[0];
       setRegionId(mumbai?.id || '');
       if (tpls[0]) { setActiveCode(tpls[0].code); setParams(defaultsFor(tpls[0])); }
       setLoading(false);
     })().catch((e) => { console.error(e); setLoading(false); });
-  }, []);
+  }, [firm?.id]);
 
-  useEffect(() => { if (regionId) fetchPricingContext(regionId).then(setCtx).catch(console.error); }, [regionId]);
+  useEffect(() => {
+    if (regionId && firm) fetchPricingContext(regionId, firm.id).then(setCtx).catch(console.error);
+  }, [regionId, firm?.id]);
 
   // re-estimate on context change — but never clobber hand-edited or custom sections
   useEffect(() => {
@@ -130,11 +135,11 @@ export function BoqEstimatorPage() {
   const optionalTotals = rollup(optional);
 
   const onSave = async () => {
-    if (sections.length === 0) return;
+    if (sections.length === 0 || !firm) return;
     setSaving(true);
     try {
       const id = await saveBoq({
-        title, regionId,
+        firmId: firm.id, title, regionId,
         sections: sections.map((s) => ({ name: s.name, lines: s.lines })),
         totals: grand,
       });
