@@ -244,9 +244,45 @@ begin
   raise notice 'C6 verified: privilege guards installed on profiles and crm_profiles';
 end $$;
 
--- The role tables themselves must stay unwritable by clients — Phase 1 gave
--- crm_roles only a SELECT policy, and an is_admin flip would sidestep the
--- guards above entirely. Assert it rather than trust it.
+-- ── C6b · production drift had re-opened the role tables ───────────────────
+-- The role tables must stay unwritable by clients: Phase 1 gives crm_roles a
+-- SELECT policy only, because an is_admin flip sidesteps every guard above.
+-- The assertion at the foot of this block was written to confirm that.
+--
+-- On the first production deploy it FIRED, and it was right to. Production
+-- carried two policies that exist in no migration:
+--
+--   crm_roles_mod             TO authenticated USING (firm_id = current_firm_id())
+--   crm_role_permissions_mod  TO authenticated USING (firm_id = current_firm_id())
+--
+-- No command clause means FOR ALL, so any authenticated member of a firm could
+--     update crm_roles set is_admin = true where firm_id = <their own>
+-- and become an administrator directly — the C4/C6 escalation, live, through a
+-- door that only ever existed on the deployed database. Created out-of-band and
+-- never recorded, so no amount of reading the migration tree would have found
+-- it; only running the assertion against production did.
+--
+-- Asserting is therefore not enough. Drop any client-writable policy on these
+-- two tables first, then assert. The drop is generic rather than by name so it
+-- also catches whatever the next out-of-band edit is called.
+do $$
+declare r record;
+begin
+  for r in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename in ('crm_roles', 'crm_role_permissions')
+      and cmd in ('ALL', 'INSERT', 'UPDATE', 'DELETE')
+      and roles && array['authenticated', 'anon', 'public']::name[]
+  loop
+    execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
+    raise warning 'C6b: dropped client-writable policy %.% — it allowed a '
+                  'direct is_admin flip', r.tablename, r.policyname;
+  end loop;
+end $$;
+
+-- Now assert. Reaching this with anything left means the drop above missed it.
 do $$
 declare w text;
 begin

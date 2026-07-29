@@ -93,27 +93,41 @@ $$;
 -- Eight tables carried ONLY an anon policy. RLS is enabled on all of them, and
 -- "RLS on with no matching policy" means deny-all — so revoking anon without
 -- these would lock authenticated users out of RBAC, subscriptions and tasks.
+--
+-- Every create below is preceded by `drop policy if exists`, because production
+-- had DRIFTED: crm_roles_sel, crm_role_permissions_sel, crm_profiles_sel,
+-- crm_profiles_mod and crm_feature_flags_sel already existed there, created
+-- out-of-band and never recorded in a migration. Without the drops this file
+-- aborts on the first of them with 42710 and the whole of Phase 1 rolls back —
+-- which is exactly what happened on the first production push. The predicates
+-- created here are identical to the ones already present, so the drop-and-
+-- recreate is semantically a no-op where they exist and repairs the tree
+-- everywhere else.
 
 -- crm_roles / crm_role_permissions: readable within your own firm, and NOT
 -- writable by anyone. This closes the privilege escalation in C4 directly —
 -- `UPDATE crm_roles SET is_admin = true` no longer has a policy to pass.
 -- Role mutation must go through an admin-checked RPC (Phase 2).
+drop policy if exists crm_roles_sel on public.crm_roles;
 create policy crm_roles_sel on public.crm_roles
   for select to authenticated
   using (firm_id = public.current_firm_id());
 
+drop policy if exists crm_role_permissions_sel on public.crm_role_permissions;
 create policy crm_role_permissions_sel on public.crm_role_permissions
   for select to authenticated
   using (firm_id = public.current_firm_id());
 
 -- subscription_plans is a global catalogue, not firm-scoped: every logged-in
 -- user may read the tiers. It holds no customer data.
+drop policy if exists subscription_plans_sel on public.subscription_plans;
 create policy subscription_plans_sel on public.subscription_plans
   for select to authenticated
   using (true);
 
 -- firm_subscriptions is firm-scoped and read-only to the client; billing state
 -- is written by the platform, never by the tenant.
+drop policy if exists firm_subscriptions_sel on public.firm_subscriptions;
 create policy firm_subscriptions_sel on public.firm_subscriptions
   for select to authenticated
   using (firm_id = public.current_firm_id());
@@ -124,6 +138,8 @@ do $$
 declare t text;
 begin
   foreach t in array array['task_lists','task_subtasks','task_activity'] loop
+    execute format('drop policy if exists %I on public.%I', t||'_sel', t);
+    execute format('drop policy if exists %I on public.%I', t||'_mod', t);
     execute format(
       'create policy %I on public.%I for select to authenticated using (firm_id = public.current_firm_id())',
       t||'_sel', t);
@@ -138,10 +154,12 @@ end $$;
 -- the one anon-only table with no anon_dev-style policy name.
 -- Firm scope is the security boundary; the per-user `scope`/`user_id` split is a
 -- product concern the app already handles.
+drop policy if exists crm_dashboard_layouts_sel on public.crm_dashboard_layouts;
 create policy crm_dashboard_layouts_sel on public.crm_dashboard_layouts
   for select to authenticated
   using (firm_id = public.current_firm_id());
 
+drop policy if exists crm_dashboard_layouts_mod on public.crm_dashboard_layouts;
 create policy crm_dashboard_layouts_mod on public.crm_dashboard_layouts
   for all to authenticated
   using (firm_id = public.current_firm_id())
