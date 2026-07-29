@@ -83,7 +83,7 @@ export async function listCatalogCategories(): Promise<CatalogCategory[]> {
 export async function listMaterials(firmId: string): Promise<PurchaseMaterial[]> {
   const [{ data: products, error: ep }, { data: cats, error: ec }, { data: skus, error: es }, { data: rates, error: er }] =
     await Promise.all([
-      sb.from('catalog_products').select('id,name,category_id,base_uom,hsn_code,gst_rate,is_active').order('name'),
+      sb.from('catalog_products_effective').select('id,name,category_id,base_uom,hsn_code,gst_rate,is_active').order('name'),
       sb.from('catalog_categories').select('id,name'),
       sb.from('product_skus').select('id,product_id'),
       sb.from('rate_cards').select('sku_id,rate,region_id,valid_from').eq('firm_id', firmId).not('sku_id', 'is', null),
@@ -135,7 +135,13 @@ export async function saveMaterial(input: MaterialInput, firmId: string): Promis
   };
   if (input.description?.trim()) fields.attributes = { description: input.description.trim() };
   if (input.id) {
-    const { error } = await sb.from('catalog_products').update(fields).eq('id', input.id);
+    // Copy-on-write (H2b). The shared catalogue is read-only to every tenant;
+    // this RPC updates in place when the material belongs to this firm and
+    // records a per-firm override when it is a global row. A direct UPDATE
+    // here used to reprice every other firm's estimates.
+    const { error } = await (sb as any).rpc('catalog_product_override_set', {
+      p_product_id: input.id, p_patch: fields,
+    });
     if (error) throw error;
     return input.id;
   }
@@ -147,6 +153,9 @@ export async function saveMaterial(input: MaterialInput, firmId: string): Promis
 
 /** Soft-delete a material (kept referenced by history; hidden from pickers). */
 export async function deactivateMaterial(id: string): Promise<void> {
-  const { error } = await sb.from('catalog_products').update({ is_active: false }).eq('id', id);
+  // H2b: hiding a shared material hides it for THIS firm only, as an override.
+  const { error } = await (sb as any).rpc('catalog_product_override_set', {
+    p_product_id: id, p_patch: { is_active: false },
+  });
   if (error) throw error;
 }

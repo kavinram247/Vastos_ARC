@@ -16,7 +16,7 @@ export interface VarianceSummary { products: ProductVariance[]; accuracy: number
 export async function fetchVarianceSummary(firmId: string): Promise<VarianceSummary> {
   const [{ data: variance, error: ev }, { data: products, error: ep }, { data: skus, error: es }, { data: rates, error: er }] = await Promise.all([
     supabase.from('boq_actual_variance').select('product_id,project_id,estimated_qty,actual_qty,estimated_rate,actual_rate,estimated_cost,actual_cost').eq('firm_id', firmId),
-    supabase.from('catalog_products').select('id,name,base_uom,waste_factor'),
+    supabase.from('catalog_products_effective').select('id,name,base_uom,waste_factor'),
     supabase.from('product_skus').select('id,product_id,quality_grade'),
     supabase.from('rate_cards').select('sku_id,rate,valid_from').eq('firm_id', firmId).is('region_id', null).not('sku_id', 'is', null).order('valid_from', { ascending: false }),
   ]);
@@ -79,7 +79,13 @@ export async function runCalibration(regionId: string | null, firmId: string, cr
     if (!wasteChanged && !rateChanged) continue;
 
     if (wasteChanged) {
-      await supabase.from('catalog_products').update({ waste_factor: c.waste_new } as any).eq('id', p.product_id);
+      // H2b: calibration is per-firm by definition — it is derived from THIS
+      // firm's actuals — so it writes a per-firm override rather than the
+      // shared catalogue row every other firm prices from.
+      const { error: ew } = await (supabase as any).rpc('catalog_product_override_set', {
+        p_product_id: p.product_id, p_patch: { waste_factor: c.waste_new },
+      });
+      if (ew) throw ew;
       await supabase.from('calibration_runs').insert({
         firm_id: firmId, product_id: p.product_id, region_id: regionId, metric: 'waste_factor',
         old_value: c.waste_old, new_value: c.waste_new, sample_size: c.sample_size, damping: 0.3,

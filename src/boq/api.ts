@@ -50,7 +50,11 @@ export async function fetchPricingContext(regionId: string | null, firmId: strin
     { data: margin, error: em },
     { data: region, error: er },
   ] = await Promise.all([
-    supabase.from('catalog_products').select('id,name,base_uom,waste_factor,packaging_loss,install_loss,gst_rate'),
+    // Audit H2b: the effective view resolves this firm's catalogue overrides
+    // over the shared global rows, keeping the global row's id so product_id
+    // references stay valid. Reading catalog_products directly would price
+    // every firm's BOQ off the shared values and ignore their own tuning.
+    supabase.from('catalog_products_effective').select('id,name,base_uom,waste_factor,packaging_loss,install_loss,gst_rate'),
     supabase.from('product_skus').select('id,product_id,brand,quality_grade'),
     supabase.from('rate_cards').select('sku_id,rate,region_id').eq('firm_id', firmId).not('sku_id', 'is', null),
     supabase.from('labour_activities').select('id,code,name'),

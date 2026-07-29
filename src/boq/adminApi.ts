@@ -2,6 +2,24 @@
 // Admin data access — edit the firm's real prices. Rate changes are
 // VERSIONED (new rate_cards row, valid_from today) to preserve audit history;
 // resolve_rate() / the latest-by-valid_from query always returns the current rate.
+//
+// Audit H2b: the catalogue is SHARED. Global rows (firm_id IS NULL) are now
+// read-only to every tenant — a firm owner used to be able to reprice every
+// other firm's estimates through them. Editing one is copy-on-write instead:
+//
+//   · products  → catalog_product_override_set() writes a sparse per-firm
+//                 override, and reads come from catalog_products_effective,
+//                 which resolves the override over the global row while
+//                 KEEPING the global row's id, so nothing that references a
+//                 product has to change;
+//   · templates → module_template_fork() clones the global template and its
+//                 rules into the firm on first edit, and reads come from
+//                 module_templates_effective, which shows the fork in place of
+//                 the global it was forked from.
+//
+// Writing catalog_products / module_templates / module_rules directly still
+// compiles, and will silently affect zero rows for a global row. Go through
+// the helpers below.
 // ─────────────────────────────────────────────────────────────
 import { supabase } from '../lib/supabase';
 
@@ -14,7 +32,7 @@ export interface MaterialRow {
 export async function fetchMaterialRows(firmId: string): Promise<MaterialRow[]> {
   const [{ data: cats, error: ec }, { data: products, error: ep }, { data: skus, error: es }, { data: rates, error: er }] = await Promise.all([
     supabase.from('catalog_categories').select('id,name,path'),
-    supabase.from('catalog_products').select('id,name,category_id,base_uom,waste_factor,gst_rate').order('name'),
+    supabase.from('catalog_products_effective').select('id,name,category_id,base_uom,waste_factor,gst_rate').order('name'),
     supabase.from('product_skus').select('id,product_id,brand,quality_grade'),
     supabase.from('rate_cards').select('sku_id,rate,valid_from').eq('firm_id', firmId).is('region_id', null).not('sku_id', 'is', null).order('valid_from', { ascending: false }),
   ]);
@@ -48,8 +66,22 @@ export async function saveMaterialRate(skuId: string, rate: number, firmId: stri
   if (error) throw error;
 }
 
+// Copy-on-write (H2b). The RPC updates in place when the product belongs to
+// this firm and writes an override when it is a shared global row; the caller
+// does not need to know which.
 export async function saveProductWaste(productId: string, waste: number) {
-  const { error } = await supabase.from('catalog_products').update({ waste_factor: waste } as any).eq('id', productId);
+  const { error } = await (supabase as any).rpc('catalog_product_override_set', {
+    p_product_id: productId,
+    p_patch: { waste_factor: waste },
+  });
+  if (error) throw error;
+}
+
+/** Drop this firm's override and follow the shared catalogue again (H2b). */
+export async function clearProductOverride(productId: string) {
+  const { error } = await (supabase as any).rpc('catalog_product_override_clear', {
+    p_product_id: productId,
+  });
   if (error) throw error;
 }
 
@@ -136,7 +168,7 @@ export interface TemplateAdminRow {
 
 export async function fetchTemplatesAdmin(): Promise<TemplateAdminRow[]> {
   const [{ data: tpls, error: e1 }, { data: rules, error: e2 }] = await Promise.all([
-    supabase.from('module_templates').select('id,code,name,category,description,param_schema,derived_vars,is_active').order('name'),
+    supabase.from('module_templates_effective').select('id,code,name,category,description,param_schema,derived_vars,is_active').order('name'),
     supabase.from('module_rules').select('id,template_id,seq,output_kind,product_id,labour_activity_id,label,condition,qty_formula,uom').order('seq'),
   ]);
   if (e1) throw e1; if (e2) throw e2;
@@ -154,14 +186,24 @@ export async function fetchTemplatesAdmin(): Promise<TemplateAdminRow[]> {
   }));
 }
 
-export async function updateTemplateActive(id: string, is_active: boolean): Promise<void> {
-  const { error } = await supabase.from('module_templates').update({ is_active, updated_at: new Date().toISOString() } as any).eq('id', id);
+// Fork-on-write (H2b). Each of these returns the template id to use from now
+// on: editing a shared global template forks it into this firm first, so the
+// id changes on that first edit. Callers reload from fetchTemplatesAdmin()
+// afterwards, which resolves the fork in place of the global.
+export async function updateTemplateActive(id: string, is_active: boolean): Promise<string> {
+  const { data, error } = await (supabase as any).rpc('module_template_set_meta', {
+    p_template_id: id, p_patch: { is_active },
+  });
   if (error) throw error;
+  return data as string;
 }
 
-export async function saveTemplateMeta(id: string, data: { name: string; description: string; category: string; derived_vars: any[]; param_schema: any }): Promise<void> {
-  const { error } = await supabase.from('module_templates').update({ ...data, updated_at: new Date().toISOString() } as any).eq('id', id);
+export async function saveTemplateMeta(id: string, data: { name: string; description: string; category: string; derived_vars: any[]; param_schema: any }): Promise<string> {
+  const { data: tplId, error } = await (supabase as any).rpc('module_template_set_meta', {
+    p_template_id: id, p_patch: data,
+  });
   if (error) throw error;
+  return tplId as string;
 }
 
 export async function createTemplateFull(data: { code: string; name: string; category: string; description: string; param_schema: any; derived_vars: any[] }, firmId: string): Promise<string> {
@@ -171,20 +213,30 @@ export async function createTemplateFull(data: { code: string; name: string; cat
   return (row as any).id;
 }
 
+// Rules belong to a template and inherit its tenancy (H2b), so these fork the
+// parent first. After a fork the caller's rule id refers to the global rule;
+// the RPC locates the counterpart in the fork by `seq` and returns the ids to
+// use from now on.
 export async function saveRule(rule: Omit<RuleAdminRow, 'id'>): Promise<RuleAdminRow> {
-  const { data, error } = await supabase.from('module_rules').insert(rule as any).select('id,template_id,seq,output_kind,product_id,labour_activity_id,label,condition,qty_formula,uom').single();
+  const { data, error } = await (supabase as any).rpc('module_rule_save', {
+    p_rule_id: null, p_template_id: rule.template_id, p_data: rule,
+  });
   if (error) throw error;
-  return data as RuleAdminRow;
+  return { ...rule, id: data.rule_id, template_id: data.template_id } as RuleAdminRow;
 }
 
-export async function updateRule(id: string, data: Partial<Omit<RuleAdminRow, 'id'>>): Promise<void> {
-  const { error } = await supabase.from('module_rules').update(data as any).eq('id', id);
+export async function updateRule(id: string, data: Partial<Omit<RuleAdminRow, 'id'>>): Promise<{ template_id: string; rule_id: string }> {
+  const { data: res, error } = await (supabase as any).rpc('module_rule_save', {
+    p_rule_id: id, p_template_id: data.template_id ?? null, p_data: data,
+  });
   if (error) throw error;
+  return res as { template_id: string; rule_id: string };
 }
 
-export async function deleteRule(id: string): Promise<void> {
-  const { error } = await supabase.from('module_rules').delete().eq('id', id);
+export async function deleteRule(id: string): Promise<{ template_id: string }> {
+  const { data, error } = await (supabase as any).rpc('module_rule_delete', { p_rule_id: id });
   if (error) throw error;
+  return data as { template_id: string };
 }
 
 export interface ProductSimple { id: string; name: string; base_uom: string; category: string }
@@ -193,7 +245,7 @@ export interface LabourSimple { id: string; name: string; code: string; base_uom
 export async function fetchProductsSimple(): Promise<ProductSimple[]> {
   const [{ data: cats }, { data: prods }] = await Promise.all([
     supabase.from('catalog_categories').select('id,name'),
-    supabase.from('catalog_products').select('id,name,base_uom,category_id').eq('is_active', true).order('name'),
+    supabase.from('catalog_products_effective').select('id,name,base_uom,category_id').eq('is_active', true).order('name'),
   ]);
   const catName = new Map(((cats || []) as any[]).map((c: any) => [c.id, c.name]));
   return ((prods || []) as any[]).map((p: any) => ({ id: p.id, name: p.name, base_uom: p.base_uom, category: catName.get(p.category_id) || '' }));
