@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select } from '../components/ui/Input';
-import { FUNCTIONS_BASE_URL } from '../lib/supabase';
+import { FUNCTIONS_BASE_URL, supabase } from '../lib/supabase';
 import { stageColor } from './logic';
 import { TELEPHONY_PROVIDERS, type TelephonyConfig } from './telephony';
 import type { Page } from '../types';
@@ -172,10 +172,86 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
           <code className="flex-1 truncate text-xs text-slate-600">{webhookUrl}</code>
           <button onClick={() => navigator.clipboard?.writeText(webhookUrl)} className="text-slate-400 hover:text-indigo-600"><Copy className="w-4 h-4" /></button>
         </div>
+        {/* Audit C9: the endpoint used to identify the firm by a constant baked
+            into the function, so every customer's enquiries landed in one
+            tenant. The token below is what tells the webhook whose lead this
+            is — and it is also the authentication the endpoint never had. */}
+        <WebhookTokens />
         <p className="mt-2 text-[11px] text-slate-400">New website leads default to the first pipeline stage and stay unassigned until an owner picks them up.</p>
       </Card>
 
       {configId && <TelephonyConfigModal channelId={configId} userId={user.id} onClose={() => setConfigId(null)} />}
+    </div>
+  );
+}
+
+// ── Website webhook tokens (audit C9) ──────────────────────────────────────
+// The token is shown exactly once, at the moment it is minted: the database
+// stores only its SHA-256, so there is no read path that can hand it back —
+// deliberately, and the same posture C3 established for invite tokens.
+interface WebhookToken { id: string; label: string | null; created_at: string; last_used_at: string | null; revoked_at: string | null; }
+
+function WebhookTokens() {
+  const [tokens, setTokens] = useState<WebhookToken[]>([]);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    const { data, error } = await (supabase as any).rpc('list_lead_intake_tokens');
+    if (error) { setError(error.message); return; }
+    setTokens(data || []);
+  };
+  useEffect(() => { void load(); }, []);
+
+  const mint = async () => {
+    setBusy(true); setError(null);
+    const label = prompt('Label this token (e.g. "vastoarch.com contact form")') ?? '';
+    if (!label.trim()) { setBusy(false); return; }
+    const { data, error } = await (supabase as any).rpc('create_lead_intake_token', { p_label: label.trim() });
+    if (error) setError(error.message); else { setFresh(data.token); await load(); }
+    setBusy(false);
+  };
+
+  const revoke = async (id: string) => {
+    if (!confirm('Revoke this token? Any website still sending it will stop creating leads.')) return;
+    const { error } = await (supabase as any).rpc('revoke_lead_intake_token', { p_id: id });
+    if (error) setError(error.message); else await load();
+  };
+
+  const live = tokens.filter(t => !t.revoked_at);
+
+  return (
+    <div className="mt-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-medium text-slate-600">Webhook tokens</span>
+        <Button variant="secondary" onClick={mint} disabled={busy}><Plus className="w-3.5 h-3.5" /> New token</Button>
+      </div>
+
+      {error && <p className="mb-2 text-[11px] text-red-600">{error}</p>}
+
+      {fresh && (
+        <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
+          <p className="mb-1 text-[11px] font-medium text-amber-900">Copy this now — it is not shown again.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate text-xs text-amber-900">{fresh}</code>
+            <button onClick={() => navigator.clipboard?.writeText(fresh)} className="text-amber-600 hover:text-amber-900"><Copy className="w-4 h-4" /></button>
+          </div>
+          <p className="mt-1 text-[11px] text-amber-800">Send it as the <code className="rounded bg-amber-100 px-1">X-Webhook-Token</code> header on every POST.</p>
+        </div>
+      )}
+
+      {live.length === 0
+        ? <p className="text-[11px] text-slate-400">No token yet — website capture will refuse every enquiry until you create one.</p>
+        : live.map(t => (
+          <div key={t.id} className="flex items-center justify-between border-t border-slate-100 py-1.5 text-xs">
+            <span className="text-slate-700">{t.label || 'Untitled'}</span>
+            <span className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-400">{t.last_used_at ? `used ${new Date(t.last_used_at).toLocaleDateString()}` : 'never used'}</span>
+              <button onClick={() => revoke(t.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+            </span>
+          </div>
+        ))}
     </div>
   );
 }
