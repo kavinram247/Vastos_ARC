@@ -1,8 +1,10 @@
 // Telephony — configurable click-to-call for leads. The chosen partner + settings
 // live in the 'telephony' comm channel's config jsonb (set in Leads Admin). A call
-// uses the partner's click-to-call webhook when configured, otherwise falls back to
-// the device dialer (tel:). Every call is auto-logged to the lead timeline.
+// uses the firm's own telephony-call edge function when the partner supports
+// click-to-call, otherwise falls back to the device dialer (tel:). Every call is
+// auto-logged to the lead timeline.
 import { store } from '../data/store';
+import { supabase } from '../lib/supabase';
 import type { Lead } from '../types';
 
 export interface TelephonyProvider {
@@ -25,7 +27,14 @@ export interface TelephonyConfig {
   provider: string;
   agent_number?: string;       // rings the agent first (click-to-call)
   caller_id?: string;          // outbound caller ID shown to the lead
-  click_to_call_url?: string;  // provider/edge webhook that bridges the call
+  // click_to_call_url — REMOVED (audit C8, and the client-side half of W1b).
+  // This field was tenant-writable (crm_comm_channels_mod carried no permission
+  // predicate, so any firm member could rewrite it) and the browser POSTed the
+  // lead's phone number to whatever it contained. That leaked lead phone
+  // numbers to an attacker-chosen host, silently — placeCall() falls back to
+  // the device dialer on failure with only a console.warn, so nobody would
+  // notice. Calls now always go to the firm's own telephony-call function,
+  // addressed from VITE_SUPABASE_URL, and carry only a lead id.
 }
 
 export interface TelephonyState {
@@ -59,7 +68,7 @@ export async function placeCall(lead: Lead, firmId: string, actorId: string): Pr
   if (!phone) return { ok: false, mode: 'dialer', error: 'This lead has no phone number.' };
 
   const t = getTelephony(firmId);
-  const useWebhook = t.provider.webhook && t.connected && !!t.config.click_to_call_url;
+  const useWebhook = t.provider.webhook && t.connected;
   const mode: CallResult['mode'] = useWebhook ? 'click-to-call' : 'dialer';
 
   // Auto-log the call on the lead timeline (updates last-contact date via the store).
@@ -72,14 +81,17 @@ export async function placeCall(lead: Lead, firmId: string, actorId: string): Pr
 
   if (useWebhook) {
     try {
-      const res = await fetch(t.config.click_to_call_url!, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ to: phone, from: t.config.agent_number || t.config.caller_id || '', lead_id: lead.id, firm_id: firmId, provider: t.provider.value }),
+      // Only the lead id travels (audit C8). The destination number, the agent
+      // number and the caller's right to dial either are all resolved
+      // server-side from the session by telephony_request_call(); a number in
+      // this body would be ignored. invoke() attaches the user's JWT, which the
+      // function now requires.
+      const { data, error } = await supabase.functions.invoke('telephony-call', {
+        body: { lead_id: lead.id },
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.ok) return { ok: true, mode };
+      if (!error && data?.ok) return { ok: true, mode };
       // Not fully configured / provider error → fall back to the device dialer so the call still happens.
-      console.warn('[telephony] click-to-call failed, falling back to dialer:', data?.error || res.status);
+      console.warn('[telephony] click-to-call failed, falling back to dialer:', data?.error || error?.message);
     } catch (e) {
       console.warn('[telephony] click-to-call error, falling back to dialer:', (e as Error)?.message);
     }

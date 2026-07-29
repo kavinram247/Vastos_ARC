@@ -180,8 +180,6 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
   );
 }
 
-const TELEPHONY_FN_URL = `${FUNCTIONS_BASE_URL}/telephony-call`;   // audit H5 (residual)
-
 function TelephonyConfigModal({ channelId, userId, onClose }: { channelId: string; userId: string; onClose: () => void }) {
   const store = useStore();
   const channel = store.commChannels.find(c => c.id === channelId);
@@ -189,12 +187,11 @@ function TelephonyConfigModal({ channelId, userId, onClose }: { channelId: strin
   const [provider, setProvider] = useState(existing.provider || 'manual');
   const [agentNumber, setAgentNumber] = useState(existing.agent_number || '');
   const [callerId, setCallerId] = useState(existing.caller_id || '');
-  const [webhookUrl, setWebhookUrl] = useState(existing.click_to_call_url || TELEPHONY_FN_URL);
   if (!channel) return null;
   const def = TELEPHONY_PROVIDERS.find(p => p.value === provider) || TELEPHONY_PROVIDERS[0];
 
   const save = () => {
-    const config: TelephonyConfig = { provider, agent_number: agentNumber.trim() || undefined, caller_id: callerId.trim() || undefined, click_to_call_url: def.webhook ? (webhookUrl.trim() || undefined) : undefined };
+    const config: TelephonyConfig = { provider, agent_number: agentNumber.trim() || undefined, caller_id: callerId.trim() || undefined };
     store.updateCommChannel(channelId, {
       provider: `telephony_${provider}`,
       display_name: def.label,
@@ -218,11 +215,14 @@ function TelephonyConfigModal({ channelId, userId, onClose }: { channelId: strin
           <>
             <Input label="Agent number (rings first)" value={agentNumber} onChange={e => setAgentNumber(e.target.value)} placeholder="+91 98xxxxxx00" />
             <Input label={provider === 'exotel' ? 'Caller ID — your ExoPhone' : 'Caller ID (shown to the lead)'} value={callerId} onChange={e => setCallerId(e.target.value)} placeholder="+91 80xxxxxx00" />
-            <Input label="Click-to-call endpoint (your telephony-call function)" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder={TELEPHONY_FN_URL} />
+            {/* The click-to-call endpoint field is gone (audit C8). It was
+                writable by any firm member and the browser POSTed the lead's
+                phone number to whatever it held. Calls now always go to this
+                project's own telephony-call function. */}
             <div className="-mt-1 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-800">
               <b>Where do the API Key &amp; Token go?</b> Not here — they're <b>secrets</b> set on the <code className="rounded bg-amber-100 px-1">telephony-call</code> edge function, never in the browser. For Exotel set:
               <code className="mt-1 block rounded bg-amber-100 px-1 py-0.5">EXOTEL_API_KEY, EXOTEL_API_TOKEN, EXOTEL_ACCOUNT_SID, EXOTEL_SUBDOMAIN, EXOTEL_CALLER_ID</code>
-              in Supabase → Edge Functions → Secrets. This field just points the app at that function; leave it as-is unless you self-host the bridge.
+              in Supabase → Edge Functions → Secrets.
             </div>
           </>
         ) : (
