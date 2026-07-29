@@ -117,9 +117,18 @@ begin
     raise exception 'unknown role for this firm' using errcode = '22023';
   end if;
 
+  -- NOTE (corrected in place; see 20260729030000): this originally tested for
+  -- ANY profiles row, which broke every invite — UserManagementPage inserted
+  -- the placeholder profiles row one step before calling this function, so the
+  -- guard always fired. It must test for an ACTIVATED member. The later
+  -- migration supersedes this whole function and also moves the placeholder
+  -- writes in here; the condition is corrected anyway so that replaying the
+  -- tree does not pass through a state where inviting is impossible.
   if exists (
     select 1 from public.profiles pr
-    where pr.firm_id = v_firm and lower(pr.email) = v_email
+    where pr.firm_id = v_firm
+      and lower(pr.email) = v_email
+      and pr.auth_uid is not null
   ) then
     raise exception 'that person is already a member of this firm'
       using errcode = '23505';

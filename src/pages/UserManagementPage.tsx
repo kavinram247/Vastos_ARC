@@ -361,39 +361,34 @@ function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: ()
     const email = form.email.trim().toLowerCase();
 
     try {
-      // 1. Create auth-linked profiles row (AcceptInvitePage will update auth_uid here)
-      const { error: pe } = await (supabase as any).from('profiles').insert({
-        firm_id: firmId, email, full_name: form.full_name.trim(),
-        role: legacyRole, phone: form.phone.trim() || null,
+      // One admin-checked RPC creates the placeholder profiles + crm_profiles
+      // rows and mints the token, in a single transaction.
+      //
+      // This used to be three separate writes from the browser — profiles,
+      // then crm_profiles, then create_invite — which could half-succeed, and
+      // which after C3 could not succeed at all: create_invite refused because
+      // the profiles row inserted one step earlier looked like existing
+      // membership, so every invite failed with 23505. It now distinguishes an
+      // activated member (auth_uid set) from the placeholder it writes itself.
+      //
+      // Audit C3: user_invites is deny-all for clients. The firm is taken from
+      // the caller's own session, not from `firmId` here, so an admin cannot
+      // invite into another tenant. The token comes back exactly once, to
+      // build the link below; it is never readable again.
+      const { data: invite, error: ie } = await (supabase as any).rpc('create_invite', {
+        p_email: email,
+        p_full_name: form.full_name.trim(),
+        p_role_id: form.role_id || null,
+        p_phone: form.phone.trim() || null,
       });
-      if (pe) throw pe;
+      if (ie) throw ie;
 
-      // 2. Create crm_profiles row with explicit id (RBAC role assignment)
-      const crmId = crypto.randomUUID();
-      const { error: cpe } = await (supabase as any).from('crm_profiles').insert({
-        id: crmId, firm_id: firmId, email, full_name: form.full_name.trim(),
-        role: legacyRole, role_id: form.role_id || null, phone: form.phone.trim() || null,
-      });
-      if (cpe) throw cpe;
-
-      // 3. Update local store for immediate list display
+      // Local store, for immediate list display.
       store.addProfile({
         firm_id: firmId, email, full_name: form.full_name.trim(),
         role: legacyRole, role_id: form.role_id || null,
         phone: form.phone.trim() || undefined,
       });
-
-      // 4. Generate invite token — no Supabase auth email, admin shares the link manually.
-      // Audit C3: user_invites is deny-all for clients, so this goes through an
-      // admin-checked RPC. The firm is taken from the caller's own session, not
-      // from `firmId` here, so an admin cannot mint an invite into another
-      // tenant. The token comes back exactly once, to build the link below.
-      const { data: invite, error: ie } = await (supabase as any).rpc('create_invite', {
-        p_email: email,
-        p_full_name: form.full_name.trim(),
-        p_role_id: form.role_id || null,
-      });
-      if (ie) throw ie;
 
       setInviteLink(`${window.location.origin}?invite=${invite.token}`);
     } catch (err: any) {

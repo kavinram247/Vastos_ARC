@@ -12,6 +12,21 @@ interface InviteRow {
 
 interface Props { token: string }
 
+const MIN_PASSWORD = 10;
+
+// accept-invite replies with fixed codes rather than internal error text
+// (audit W1a): raw ue.message / err.message used to be returned verbatim to an
+// unauthenticated caller. Anything unrecognised falls through to generic copy.
+const ERROR_COPY: Record<string, string> = {
+  already_used:     'This invite has already been used. Try signing in instead.',
+  expired:          'This invite link has expired. Ask your admin for a new one.',
+  invalid:          'This invite link is not valid. Ask your admin for a new one.',
+  email_registered: 'This email is already registered. Try signing in instead.',
+  weak_password:    `Please choose a password of at least ${MIN_PASSWORD} characters that isn't a common word or your email name.`,
+  bad_request:      'Something went wrong. Please try again.',
+  server_error:     'We could not complete your sign-up. Your invite link still works — please try again.',
+};
+
 export function AcceptInvitePage({ token }: Props) {
   const [invite, setInvite] = useState<InviteRow | null>(null);
   const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used' | 'done'>('loading');
@@ -38,7 +53,10 @@ export function AcceptInvitePage({ token }: Props) {
   const handleAccept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invite) return;
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    // Mirrors the server rule so the message is immediate; the copy in
+    // accept-invite is the one that actually decides (audit W1a — this check
+    // used to be the only one, and a direct POST skipped it).
+    if (password.length < MIN_PASSWORD) { setError(`Password must be at least ${MIN_PASSWORD} characters.`); return; }
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setError('');
     setSaving(true);
@@ -56,15 +74,9 @@ export function AcceptInvitePage({ token }: Props) {
     const result = await res.json();
 
     if (!res.ok || result.error) {
-      if (result.error === 'already_used') {
-        setError('This invite has already been used. Try signing in instead.');
-      } else if (result.error === 'expired') {
-        setError('This invite link has expired. Ask your admin for a new one.');
-      } else if (result.error?.includes('already been registered')) {
-        setError('This email is already registered. Try signing in instead.');
-      } else {
-        setError(result.error ?? 'Something went wrong. Please try again.');
-      }
+      if (result.error === 'already_used') { setStatus('used'); return; }
+      if (result.error === 'expired')      { setStatus('expired'); return; }
+      setError(ERROR_COPY[result.error] ?? 'Something went wrong. Please try again.');
       setSaving(false);
       return;
     }
@@ -141,9 +153,9 @@ export function AcceptInvitePage({ token }: Props) {
 
         <form onSubmit={handleAccept} className="mt-6 space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-700">Password <span className="text-slate-400 font-normal">(min 8 characters)</span></label>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-700">Password <span className="text-slate-400 font-normal">(min {MIN_PASSWORD} characters)</span></label>
             <div className="relative">
-              <input type={showPw ? 'text' : 'password'} required minLength={8}
+              <input type={showPw ? 'text' : 'password'} required minLength={MIN_PASSWORD}
                 value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 pr-11 text-sm focus:border-indigo-500 focus:outline-none focus:ring-3 focus:ring-indigo-500/15" />
