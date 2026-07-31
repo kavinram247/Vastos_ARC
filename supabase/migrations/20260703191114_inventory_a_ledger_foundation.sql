@@ -94,7 +94,13 @@ language sql stable security definer set search_path = 'public' as $$
          p.full_name
   from p
   left join crm_profiles cp on cp.email = p.email and cp.firm_id = p.firm_id
-  left join crm_roles r on r.id = cp.role_id;
+  -- `and r.firm_id = cp.firm_id` corrected in place; see
+  -- 20260731020000_platform_b_cross_firm_role_scope.sql, which also ships it
+  -- forward. crm_roles.id is a GLOBAL primary key, so without the firm
+  -- predicate this join resolved another tenant's role and handed back its
+  -- is_admin — passing every inv_require() check in the module. Same defect C4
+  -- fixed in crm_has_permission.
+  left join crm_roles r on r.id = cp.role_id and r.firm_id = cp.firm_id;
 $$;
 
 -- Raises if the current user may not perform (module, action). Firm owners and

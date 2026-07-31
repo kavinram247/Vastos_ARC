@@ -22,6 +22,12 @@ interface AuthState {
   plan: SubscriptionPlan | null;
   role: Role | null;
   isAuthenticated: boolean;
+  /**
+   * Vasto platform staff. Resolved server-side per session from a deny-all
+   * allowlist, never asserted by the client and never derived from the firm
+   * role — a firm admin is not an operator. Gates the operator console only.
+   */
+  isVastosOperator: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -32,7 +38,7 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-async function resolveSession(authUid: string): Promise<{ profile: Profile; firm: Firm; plan: SubscriptionPlan | null } | null> {
+async function resolveSession(authUid: string): Promise<{ profile: Profile; firm: Firm; plan: SubscriptionPlan | null; isVastosOperator: boolean } | null> {
   // 1. Find the profile linked to this auth UID
   const { data: profileRow, error: pe } = await supabase
     .from('profiles')
@@ -50,21 +56,33 @@ async function resolveSession(authUid: string): Promise<{ profile: Profile; firm
   if (fe || !firmRow) return null;
   if ((firmRow as any).deleted_at) return null; // firm has been deleted by VASTOS admin
 
-  // 3. Fetch the crm_profile for role_id (RBAC) — match by email+firm_id, not id
-  //    (profiles.id and crm_profiles.id are separate auto-generated UUIDs)
-  const { data: crmRow } = await supabase
-    .from('crm_profiles')
-    .select('role_id')
-    .eq('email', (profileRow as any).email)
-    .eq('firm_id', (profileRow as any).firm_id)
-    .maybeSingle();
-
-  // 4. Fetch subscription plan (seats_purchased overrides plan's max_users if set)
-  const { data: subRow } = await (supabase as any)
-    .from('firm_subscriptions')
-    .select('status,trial_ends_at,plan_id,seats_purchased,subscription_plans(id,name,module_keys,max_users,max_projects,storage_gb)')
-    .eq('firm_id', (profileRow as any).firm_id)
-    .maybeSingle();
+  // 3/4/5 are independent of each other, so they run together rather than as
+  // three serial round-trips on the login path.
+  //
+  //   3. the crm_profile for role_id (RBAC) — matched by email+firm_id, not id
+  //      (profiles.id and crm_profiles.id are separate auto-generated UUIDs)
+  //   4. the subscription plan (seats_purchased overrides the plan's max_users)
+  //   5. platform-operator status. Resolved server-side from auth.uid() against
+  //      a deny-all allowlist; the client cannot assert it. Wrapped so that a
+  //      throw — network, RPC missing on an older database — yields false and
+  //      the console stays hidden. Fail closed.
+  const [{ data: crmRow }, { data: subRow }, isVastosOperator] = await Promise.all([
+    supabase
+      .from('crm_profiles')
+      .select('role_id')
+      .eq('email', (profileRow as any).email)
+      .eq('firm_id', (profileRow as any).firm_id)
+      .maybeSingle(),
+    (supabase as any)
+      .from('firm_subscriptions')
+      .select('status,trial_ends_at,plan_id,seats_purchased,subscription_plans(id,name,module_keys,max_users,max_projects,storage_gb)')
+      .eq('firm_id', (profileRow as any).firm_id)
+      .maybeSingle(),
+    (supabase as any)
+      .rpc('is_vastos_operator')
+      .then(({ data, error }: { data: unknown; error: unknown }) => (error ? false : data === true))
+      .catch(() => false),
+  ]);
 
   const planData = subRow ? (subRow as any).subscription_plans : null;
   const plan: SubscriptionPlan | null = planData
@@ -102,27 +120,30 @@ async function resolveSession(authUid: string): Promise<{ profile: Profile; firm
     created_at: (firmRow as any).created_at,
   };
 
-  return { profile, firm, plan };
+  return { profile, firm, plan, isVastosOperator };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [firm, setFirm] = useState<Firm | null>(null);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
+  const [isVastosOperator, setIsVastosOperator] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // The server resolves the caller's role from auth.uid(); the client no longer
   // asserts it. See supabase.ts → the removed setRoleContext (audit C4).
-  const enter = useCallback((profile: Profile, firmData: Firm, planData: SubscriptionPlan | null) => {
+  const enter = useCallback((profile: Profile, firmData: Firm, planData: SubscriptionPlan | null, operator: boolean) => {
     setUser(profile);
     setFirm(firmData);
     setPlan(planData);
+    setIsVastosOperator(operator);
   }, []);
 
   const clear = useCallback(() => {
     setUser(null);
     setFirm(null);
     setPlan(null);
+    setIsVastosOperator(false);
   }, []);
 
   // Listen for Supabase auth state changes
@@ -130,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const resolved = await resolveSession(session.user.id);
-        if (resolved) enter(resolved.profile, resolved.firm, resolved.plan);
+        if (resolved) enter(resolved.profile, resolved.firm, resolved.plan, resolved.isVastosOperator);
       }
       setIsLoading(false);
     });
@@ -138,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         const resolved = await resolveSession(session.user.id);
-        if (resolved) enter(resolved.profile, resolved.firm, resolved.plan);
+        if (resolved) enter(resolved.profile, resolved.firm, resolved.plan, resolved.isVastosOperator);
       } else if (event === 'SIGNED_OUT') {
         store.reset(); // clear in-memory data so next login re-hydrates from DB
         clear();
@@ -180,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       max_users: null, max_projects: null, storage_gb: null,
       status: 'active', trial_ends_at: null,
     };
-    enter(profile, firmData, demoPlan);
+    enter(profile, firmData, demoPlan, false);
   }, [enter]);
 
   const role = user ? store.roleForUser(user.id) ?? null : null;
@@ -189,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user, firm, plan, role,
       isAuthenticated: !!user,
+      isVastosOperator,
       isLoading,
       signIn, signOut, forgotPassword, switchUser,
     }}>

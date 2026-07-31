@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -196,7 +191,7 @@ export type Database = {
           firm_id: string
           id: string
           product_id: string | null
-          project_id: string | null
+          project_id: string
           region_id: string | null
           variance_pct: number | null
         }
@@ -212,7 +207,7 @@ export type Database = {
           firm_id: string
           id?: string
           product_id?: string | null
-          project_id?: string | null
+          project_id: string
           region_id?: string | null
           variance_pct?: number | null
         }
@@ -228,7 +223,7 @@ export type Database = {
           firm_id?: string
           id?: string
           product_id?: string | null
-          project_id?: string | null
+          project_id?: string
           region_id?: string | null
           variance_pct?: number | null
         }
@@ -3229,7 +3224,7 @@ export type Database = {
           firm_id: string
           id: string
           plan_id: string
-          seats_purchased: number
+          seats_purchased: number | null
           status: string
           trial_ends_at: string | null
           updated_at: string
@@ -3240,7 +3235,7 @@ export type Database = {
           firm_id: string
           id?: string
           plan_id: string
-          seats_purchased?: number
+          seats_purchased?: number | null
           status?: string
           trial_ends_at?: string | null
           updated_at?: string
@@ -3251,7 +3246,7 @@ export type Database = {
           firm_id?: string
           id?: string
           plan_id?: string
-          seats_purchased?: number
+          seats_purchased?: number | null
           status?: string
           trial_ends_at?: string | null
           updated_at?: string
@@ -6926,6 +6921,8 @@ export type Database = {
       vastos_admin_log: {
         Row: {
           action: string
+          actor_auth_uid: string | null
+          actor_email: string | null
           created_at: string
           details: Json
           firm_id: string | null
@@ -6934,6 +6931,8 @@ export type Database = {
         }
         Insert: {
           action: string
+          actor_auth_uid?: string | null
+          actor_email?: string | null
           created_at?: string
           details?: Json
           firm_id?: string | null
@@ -6942,11 +6941,37 @@ export type Database = {
         }
         Update: {
           action?: string
+          actor_auth_uid?: string | null
+          actor_email?: string | null
           created_at?: string
           details?: Json
           firm_id?: string | null
           firm_name?: string | null
           id?: string
+        }
+        Relationships: []
+      }
+      vastos_operators: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          auth_uid: string
+          email: string
+          revoked_at: string | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          auth_uid: string
+          email: string
+          revoked_at?: string | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          auth_uid?: string
+          email?: string
+          revoked_at?: string | null
         }
         Relationships: []
       }
@@ -7710,6 +7735,7 @@ export type Database = {
         Returns: Json
       }
       invite_release: { Args: { p_invite_id: string }; Returns: undefined }
+      is_vastos_operator: { Args: never; Returns: boolean }
       lead_intake_capture: {
         Args: {
           p_email?: string
@@ -7809,6 +7835,125 @@ export type Database = {
       }
       text2ltree: { Args: { "": string }; Returns: unknown }
       validate_invite: { Args: { p_token: string }; Returns: Json }
+      vastos_add_operator: { Args: { p_auth_uid: string }; Returns: undefined }
+      vastos_assert_not_operator_home: {
+        Args: { p_firm_id: string }
+        Returns: undefined
+      }
+      vastos_blacklist_firm: {
+        Args: { p_firm_id: string; p_reason: string }
+        Returns: undefined
+      }
+      vastos_delete_firm: {
+        Args: { p_confirm_name: string; p_firm_id: string }
+        Returns: undefined
+      }
+      vastos_invite_firm_user: {
+        Args: {
+          p_email: string
+          p_firm_id: string
+          p_full_name?: string
+          p_role_id?: string
+        }
+        Returns: Json
+      }
+      vastos_list_admin_log: {
+        Args: { p_firm_id?: string; p_limit?: number }
+        Returns: {
+          action: string
+          actor_email: string
+          created_at: string
+          details: Json
+          firm_id: string
+          firm_name: string
+          id: string
+        }[]
+      }
+      vastos_list_firm_roles: {
+        Args: { p_firm_id: string }
+        Returns: {
+          enabled: boolean
+          id: string
+          is_admin: boolean
+          key: string
+          name: string
+        }[]
+      }
+      vastos_list_firms: {
+        Args: { p_include_deleted?: boolean }
+        Returns: {
+          blacklist_reason: string
+          blacklisted_at: string
+          created_at: string
+          deleted_at: string
+          id: string
+          name: string
+          owner_activated: boolean
+          owner_email: string
+          pending_invite_count: number
+          plan_id: string
+          plan_max_users: number
+          plan_name: string
+          plan_status: string
+          seats_purchased: number
+          user_count: number
+        }[]
+      }
+      vastos_list_operators: {
+        Args: never
+        Returns: {
+          added_at: string
+          auth_uid: string
+          email: string
+          revoked_at: string
+        }[]
+      }
+      vastos_log: {
+        Args: {
+          p_action: string
+          p_actor_email: string
+          p_actor_uid: string
+          p_details?: Json
+          p_firm_id: string
+          p_firm_name: string
+        }
+        Returns: undefined
+      }
+      vastos_provision_firm: {
+        Args: {
+          p_firm_name: string
+          p_owner_email: string
+          p_owner_name?: string
+          p_plan_id?: string
+          p_trial_days?: number
+        }
+        Returns: Json
+      }
+      vastos_require_operator: {
+        Args: never
+        Returns: {
+          actor_email: string
+          actor_uid: string
+        }[]
+      }
+      vastos_revoke_operator: {
+        Args: { p_auth_uid: string }
+        Returns: undefined
+      }
+      vastos_seed_firm_defaults: {
+        Args: { p_firm_id: string }
+        Returns: undefined
+      }
+      vastos_set_firm_seats: {
+        Args: { p_firm_id: string; p_seats?: number }
+        Returns: undefined
+      }
+      vastos_suspend_firm: { Args: { p_firm_id: string }; Returns: undefined }
+      vastos_unblacklist_firm: {
+        Args: { p_firm_id: string }
+        Returns: undefined
+      }
+      vastos_unsuspend_firm: { Args: { p_firm_id: string }; Returns: undefined }
     }
     Enums: {
       adjustment_status:
@@ -8208,3 +8353,4 @@ export const Constants = {
     },
   },
 } as const
+

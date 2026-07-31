@@ -424,4 +424,10 @@ export type Page =
   | 'consumption'
   | 'transfers'
   | 'materials'
-  | 'purchase';
+  | 'purchase'
+  // Platform operator console. Deliberately NOT added to MODULES in lib/rbac.ts:
+  // RolesPermissionsPage renders its permission matrix from MODULES, so a module
+  // entry here would put a "Vastos Admin" row with checkboxes in every tenant
+  // admin's own roles editor. Access is decided by isVastosOperator in App.tsx,
+  // not by RBAC.
+  | 'vastos-admin';

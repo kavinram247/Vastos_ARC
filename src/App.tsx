@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useStore } from './hooks/useStore';
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })));
+// Lazy: three people at Vasto will ever open this, and it has no business
+// riding in every tenant user's bundle.
+const VastosAdminPage = lazy(() => import('./pages/VastosAdminPage').then(m => ({ default: m.VastosAdminPage })));
 import { Loader2 } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
@@ -49,9 +52,14 @@ import { MODULE_BY_KEY, pageToModule } from './lib/rbac';
 import type { Page } from './types';
 
 function AppInner() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isVastosOperator } = useAuth();
   const { canAccess } = usePermissions();
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+  // The ?vastos-admin deep link is read HERE and not in the App() query-param
+  // block, which runs outside AuthProvider — there it would render the console
+  // with no session and no gate at all.
+  const [currentPage, setCurrentPage] = useState<Page>(() =>
+    new URLSearchParams(window.location.search).has('vastos-admin') ? 'vastos-admin' : 'dashboard'
+  );
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
 
   const navigate = useCallback((page: Page, projectId?: string) => {
@@ -74,8 +82,17 @@ function AppInner() {
       : currentPage;
 
   // Router guard — block direct/in-app navigation to modules the role can't view.
+  //
+  // vastos-admin is an OVERRIDE, not an extra clause, because the ordinary path
+  // fails OPEN for it: canAccess() is `can() && planAllows()`, can() returns true
+  // immediately for any is_admin role without ever consulting the module, and
+  // planAllows() returns true when plan is null. So every firm admin whose firm
+  // has no firm_subscriptions row would otherwise pass the guard for a page that
+  // administers every tenant. isVastosOperator is the only thing consulted here.
   const guardModule = pageToModule(effectivePage);
-  const blocked = effectivePage !== 'login' && !canAccess(guardModule);
+  const blocked = effectivePage === 'vastos-admin'
+    ? !isVastosOperator
+    : (effectivePage !== 'login' && !canAccess(guardModule));
 
   const renderPage = () => {
     switch (effectivePage) {
@@ -165,6 +182,12 @@ function AppInner() {
         return <TransfersPage />;
       case 'materials':
         return <MaterialsPage />;
+      case 'vastos-admin':
+        return (
+          <Suspense fallback={<div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>}>
+            <VastosAdminPage />
+          </Suspense>
+        );
       default:
         return <DashboardPage onNavigate={navigate} />;
     }
@@ -176,7 +199,13 @@ function AppInner() {
       onNavigate={navigate}
       selectedProjectId={selectedProjectId}
     >
-      {blocked ? <AccessDenied module={MODULE_BY_KEY[guardModule]?.label ?? guardModule} /> : renderPage()}
+      {blocked
+        ? <AccessDenied module={
+            effectivePage === 'vastos-admin'
+              ? 'Platform Admin'
+              : (MODULE_BY_KEY[guardModule]?.label ?? guardModule)
+          } />
+        : renderPage()}
     </Layout>
   );
 }

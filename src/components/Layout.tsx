@@ -5,7 +5,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { MODULES, NAV_GROUPS } from '../lib/rbac';
 import { Avatar } from './ui/Avatar';
 import type { Page } from '../types';
-import { Bell, LogOut, Menu, X, ChevronDown } from 'lucide-react';
+import { Bell, LogOut, Menu, X, ChevronDown, Building2 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 interface LayoutProps {
@@ -16,7 +16,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
-  const { user, firm, signOut } = useAuth();
+  const { user, firm, signOut, isVastosOperator } = useAuth();
   const store = useStore();
   const { can, canAccess } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -136,6 +136,36 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
                 </div>
               </div>
             ))}
+
+            {/* Platform operator console. Deliberately OUTSIDE the MODULES-driven
+                groups above: those are filtered by canAccess(), which folds in
+                planAllows(), and no subscription plan lists this — nor should
+                one, since it is not a tenant feature. isVastosOperator is
+                resolved server-side per session. */}
+            {isVastosOperator && (
+              <div>
+                <div className="mb-1.5 px-3 text-[10px] font-semibold tracking-[0.08em] text-white/30 uppercase">
+                  Platform
+                </div>
+                <div className="space-y-0.5">
+                  <button
+                    aria-current={currentPage === 'vastos-admin' ? 'page' : undefined}
+                    onClick={() => { onNavigate('vastos-admin'); setSidebarOpen(false); }}
+                    className={cn(
+                      'flex h-9 w-full items-center gap-3 rounded-lg px-3 text-[13px] font-medium [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:shrink-0',
+                      currentPage === 'vastos-admin'
+                        ? 'bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.035)]'
+                        : 'text-white/54 hover:bg-white/[0.055] hover:text-white/88'
+                    )}
+                  >
+                    <span className={currentPage === 'vastos-admin' ? 'text-indigo-300' : 'text-white/42'}>
+                      <Building2 />
+                    </span>
+                    <span className="flex-1 text-left">Firms</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </nav>
 

@@ -21,7 +21,12 @@ CREATE TABLE IF NOT EXISTS public.firm_subscriptions (
   status                  text NOT NULL DEFAULT 'trial',
   trial_ends_at           timestamptz,
   current_period_ends_at  timestamptz,
-  seats_purchased         int NOT NULL DEFAULT 3,
+  -- Corrected in place; see 20260731010000_platform_a_schema_repair.sql, which
+  -- also ships this forward for databases already created. This was
+  -- `int NOT NULL DEFAULT 3`, which made the column's own meaning unreachable:
+  -- it is a custom override whose NULL means "use the plan's max_users", and it
+  -- could never be NULL, so every firm was capped at 3 regardless of plan.
+  seats_purchased         int,
   created_at              timestamptz NOT NULL DEFAULT now(),
   updated_at              timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT firm_subscriptions_status_check CHECK (status IN ('trial','active','suspended','cancelled'))
