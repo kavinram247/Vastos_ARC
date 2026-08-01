@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -9,14 +9,32 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { formatDate } from '../utils/format';
+import { isVastosApiConfigured, presignDownload, presignUpload, uploadToR2 } from '../lib/vastosApi';
 import type { Page } from '../types';
 import type { ProjectDocument } from '../types';
 import {
-  FileText, Upload, Search, Download, Trash2,
+  FileText, Upload, Search, Download, Trash2, Loader2,
   File, Image, FileSpreadsheet, Paperclip, FolderOpen,
   Lock, Unlock,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+
+function guessFileType(file: File): ProjectDocument['file_type'] {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (file.type.startsWith('image/')) return 'image';
+  if (ext === 'dwg' || ext === 'dxf') return 'drawing';
+  if (ext === 'pdf' || file.type === 'application/pdf') return 'pdf';
+  if (['xlsx', 'xls', 'csv'].includes(ext)) return 'spreadsheet';
+  return 'other';
+}
+
+// R2 stores the object key in file_url for real uploads; legacy/simulated
+// rows carry '#' and never resolve. presign-download 404s either way if
+// there's nothing to fetch.
+async function openDocument(docId: string, disposition: 'inline' | 'attachment') {
+  const { downloadUrl } = await presignDownload(docId, disposition);
+  window.open(downloadUrl, '_blank');
+}
 
 interface Props {
   projectId: string;
@@ -54,8 +72,20 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   if (!user || !firm) return null;
+
+  const handleDownload = async (docId: string, disposition: 'inline' | 'attachment') => {
+    setDownloadingId(docId);
+    try {
+      await openDocument(docId, disposition);
+    } catch (e) {
+      alert('Download failed: ' + (e as any).message);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const data = store.forFirm(firm.id);
   const selectedProject = projectId;
@@ -170,8 +200,8 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
                       <div className="flex items-center gap-2 shrink-0">
                         {isClient ? (
                           // Client view: download/view
-                          <Button size="sm" variant="secondary">
-                            <Download className="w-3 h-3" /> View
+                          <Button size="sm" variant="secondary" disabled={downloadingId === doc.id} onClick={() => handleDownload(doc.id, 'inline')}>
+                            {downloadingId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} View
                           </Button>
                         ) : (
                           <>
@@ -188,8 +218,8 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
                             >
                               {doc.visible_to_client ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                             </button>
-                            <Button size="sm" variant="secondary">
-                              <Download className="w-3 h-3" />
+                            <Button size="sm" variant="secondary" disabled={downloadingId === doc.id} onClick={() => handleDownload(doc.id, 'attachment')}>
+                              {downloadingId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                             </Button>
                             <button
                               onClick={() => setShowDeleteConfirm(doc.id)}
@@ -241,10 +271,14 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
   );
 }
 
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
 function UploadDocumentModal({ open, onClose, firmId, projectId, userId }: {
   open: boolean; onClose: () => void; firmId: string; projectId: string; userId: string;
 }) {
   const store = useStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     name: '',
     file_type: 'pdf' as ProjectDocument['file_type'],
@@ -253,41 +287,92 @@ function UploadDocumentModal({ open, onClose, firmId, projectId, userId }: {
     visible_to_client: true,
   });
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const reset = () => {
+    setFile(null);
+    setForm({ name: '', file_type: 'pdf', category: 'drawing', description: '', visible_to_client: true });
+    setError('');
+  };
+
+  const pickFile = (f: File) => {
+    if (f.size > MAX_UPLOAD_BYTES) {
+      setError('File exceeds the 25MB limit.');
+      return;
+    }
+    setError('');
+    setFile(f);
+    setForm(prev => ({
+      ...prev,
+      name: prev.name || f.name,
+      file_type: guessFileType(f),
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name) return;
+    if (!form.name || !file) return;
+    if (!isVastosApiConfigured()) {
+      setError('Document uploads are not configured yet — ask an admin to set VITE_VASTOS_API_URL.');
+      return;
+    }
 
     setUploading(true);
-    // Simulate upload delay
-    setTimeout(() => {
+    setError('');
+    try {
+      const contentType = file.type || 'application/octet-stream';
+      const { uploadUrl, objectKey } = await presignUpload(projectId, file.name, contentType, file.size);
+      await uploadToR2(uploadUrl, file, contentType);
       store.addProjectDocument({
         firm_id: firmId,
         project_id: projectId,
         name: form.name,
         file_type: form.file_type,
-        file_url: '#',
-        file_size: Math.floor(Math.random() * 5000) + 200,
+        file_url: objectKey,
+        file_size: Math.max(1, Math.round(file.size / 1024)),
         category: form.category,
         uploaded_by: userId,
         visible_to_client: form.visible_to_client,
         description: form.description || undefined,
       });
-      setUploading(false);
-      setForm({ name: '', file_type: 'pdf', category: 'drawing', description: '', visible_to_client: true });
+      reset();
       onClose();
-    }, 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Upload Document" size="md">
+    <Modal open={open} onClose={() => { reset(); onClose(); }} title="Upload Document" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.xlsx,.xls,.csv"
+          onChange={e => { const f = e.target.files?.[0]; if (f) pickFile(f); }}
+        />
         {/* File drop area */}
-        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors cursor-pointer">
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) pickFile(f); }}
+          className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors cursor-pointer"
+        >
           <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-          <p className="text-sm text-slate-600 font-medium">Click to browse or drag & drop files here</p>
+          {file ? (
+            <p className="text-sm text-slate-700 font-medium">{file.name} <span className="text-slate-400 font-normal">({formatFileSize(Math.max(1, Math.round(file.size / 1024)))})</span></p>
+          ) : (
+            <p className="text-sm text-slate-600 font-medium">Click to browse or drag & drop files here</p>
+          )}
           <p className="text-xs text-slate-400 mt-1">PDF, DWG, JPG, PNG, XLSX — Max 25 MB</p>
         </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        )}
 
         <Input label="Document Name *" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Floor Plan - Ground Floor v4.pdf" />
         
@@ -329,8 +414,8 @@ function UploadDocumentModal({ open, onClose, firmId, projectId, userId }: {
         </label>
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" type="button" onClick={onClose} disabled={uploading}>Cancel</Button>
-          <Button type="submit" disabled={uploading}>
+          <Button variant="secondary" type="button" onClick={() => { reset(); onClose(); }} disabled={uploading}>Cancel</Button>
+          <Button type="submit" disabled={uploading || !file}>
             {uploading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
