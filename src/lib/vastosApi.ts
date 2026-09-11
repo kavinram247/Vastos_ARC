@@ -40,6 +40,13 @@ async function authedFetch(path: string, init: RequestInit = {}): Promise<Respon
   return res;
 }
 
+/** authedFetch + .json() — the generic call other modules' api.ts files use
+ * to reach vastos-api endpoints outside this file's own bespoke wrappers. */
+export async function vastosApiFetch<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const res = await authedFetch(path, init);
+  return res.json();
+}
+
 export async function presignUpload(
   projectId: string,
   filename: string,
