@@ -95,38 +95,52 @@ class DataStore {
   }
 
   // ─── Hydration (idempotent) ───
+  // Normal path is now hydrateFromPayload(): AuthContext.resolveSession fetches
+  // /api/firm/bootstrap once (session + all firm data together) and pushes the
+  // data in here directly, so by the time HydrationGate calls hydrate() below,
+  // `loaded` is already true and this is a no-op. hydrate() itself (the old
+  // per-table PostgREST fetch via crmApi.hydrateAll) stays as a fallback for
+  // any path that reaches it without having bootstrapped first.
   hydrate(firmId: string): Promise<void> {
     if (this.loaded) return Promise.resolve();
     if (this.hydrating) return this.hydrating;
-    this.hydrating = crm.hydrateAll(firmId).then((d) => {
-      this.profiles = d.profiles as Profile[];
-      this.projects = d.projects as Project[];
-      this.assignments = d.assignments as ProjectAssignment[];
-      this.milestones = d.milestones as Milestone[];
-      this.siteUpdates = d.siteUpdates as SiteUpdate[];
-      this.paymentPlans = d.paymentPlans as PaymentPlan[];
-      this.paymentSplits = d.paymentSplits as PaymentSplit[];
-      this.paymentsReceived = d.paymentsReceived as PaymentReceived[];
-      this.costEntries = d.costEntries as CostEntry[];
-      this.comments = d.comments as Comment[];
-      this.notifications = d.notifications as Notification[];
-      this.activityLog = d.activityLog as ActivityLog[];
-      this.leads = d.leads as Lead[];
-      this.leadInteractions = d.leadInteractions as LeadInteraction[];
-      this.leadQuotations = d.leadQuotations as LeadQuotation[];
-      this.projectDocuments = d.projectDocuments as ProjectDocument[];
-      this.projectVendors = d.projectVendors as ProjectVendor[];
-      this.contacts = d.contacts as Contact[];
-      this.pipelineStages = (d.pipelineStages as PipelineStage[]).sort((a, b) => a.order_index - b.order_index);
-      this.featureFlags = d.featureFlags as FeatureFlag[];
-      this.commChannels = d.commChannels as CommChannel[];
-      this.roles = d.roles as Role[];
-      this.rolePermissions = d.rolePermissions as RolePermission[];
-      this.dashboardLayouts = d.dashboardLayouts as DashboardLayout[];
-      this.loaded = true;
-      this.notify();
-    });
+    this.hydrating = crm.hydrateAll(firmId).then((d) => this.applyHydration(d));
     return this.hydrating;
+  }
+
+  /** Populate the store from an already-fetched hydration payload (the `data`
+   * half of /api/firm/bootstrap) — no extra round trip. */
+  hydrateFromPayload(data: Record<string, any[]>) {
+    this.applyHydration(data);
+  }
+
+  private applyHydration(d: Record<string, any[]>) {
+    this.profiles = d.profiles as Profile[];
+    this.projects = d.projects as Project[];
+    this.assignments = d.assignments as ProjectAssignment[];
+    this.milestones = d.milestones as Milestone[];
+    this.siteUpdates = d.siteUpdates as SiteUpdate[];
+    this.paymentPlans = d.paymentPlans as PaymentPlan[];
+    this.paymentSplits = d.paymentSplits as PaymentSplit[];
+    this.paymentsReceived = d.paymentsReceived as PaymentReceived[];
+    this.costEntries = d.costEntries as CostEntry[];
+    this.comments = d.comments as Comment[];
+    this.notifications = d.notifications as Notification[];
+    this.activityLog = d.activityLog as ActivityLog[];
+    this.leads = d.leads as Lead[];
+    this.leadInteractions = d.leadInteractions as LeadInteraction[];
+    this.leadQuotations = d.leadQuotations as LeadQuotation[];
+    this.projectDocuments = d.projectDocuments as ProjectDocument[];
+    this.projectVendors = d.projectVendors as ProjectVendor[];
+    this.contacts = d.contacts as Contact[];
+    this.pipelineStages = (d.pipelineStages as PipelineStage[]).sort((a, b) => a.order_index - b.order_index);
+    this.featureFlags = d.featureFlags as FeatureFlag[];
+    this.commChannels = d.commChannels as CommChannel[];
+    this.roles = d.roles as Role[];
+    this.rolePermissions = d.rolePermissions as RolePermission[];
+    this.dashboardLayouts = d.dashboardLayouts as DashboardLayout[];
+    this.loaded = true;
+    this.notify();
   }
 
   // ─── RLS-like tenant filtering ───
