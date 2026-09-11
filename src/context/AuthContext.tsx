@@ -2,8 +2,6 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { Profile, Firm, UserRole, Role } from '../types';
 import { supabase } from '../lib/supabase';
 import { store } from '../data/store';
-import * as crm from '../lib/crmApi';
-import { fetchBootstrap } from '../lib/vastosApi';
 
 // ── Plan type ──────────────────────────────────────────────────
 export interface SubscriptionPlan {
@@ -40,63 +38,89 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-// Phase 5, item 2: one call to vastos-api's /api/firm/bootstrap replaces what
-// used to be 3 direct-to-Supabase round trips here (profile, firm, then
-// crm_profile+subscription+operator-rpc in parallel) *and* the DataStore's
-// separate 24-table hydration (crmApi.hydrateAll, still fired next by
-// HydrationGate in App.tsx — but store.hydrateFromPayload() below already
-// marks the store loaded, so that call is a no-op). The backend verifies the
-// bearer token itself, so identity no longer needs to travel in as an arg.
-async function resolveSession(): Promise<{ profile: Profile; firm: Firm; plan: SubscriptionPlan | null; isVastosOperator: boolean } | null> {
-  let payload;
-  try {
-    payload = await fetchBootstrap();
-  } catch (err) {
-    console.error('bootstrap failed', err);
-    return null;
-  }
-  const { session, data } = payload;
+async function resolveSession(authUid: string): Promise<{ profile: Profile; firm: Firm; plan: SubscriptionPlan | null; isVastosOperator: boolean } | null> {
+  // 1. Find the profile linked to this auth UID
+  const { data: profileRow, error: pe } = await supabase
+    .from('profiles')
+    .select('id,firm_id,email,full_name,role,phone,avatar_url,created_at')
+    .eq('auth_uid', authUid)
+    .single();
+  if (pe || !profileRow) return null;
 
-  const profile: Profile = {
-    id: session.profile.id,
-    firm_id: session.profile.firm_id,
-    email: session.profile.email,
-    full_name: session.profile.full_name,
-    role: session.profile.role,
-    phone: session.profile.phone ?? undefined,
-    avatar_url: session.profile.avatar_url ?? undefined,
-    created_at: session.profile.created_at,
-    role_id: session.profile.role_id,
-  };
+  // 2. Fetch the firm
+  const { data: firmRow, error: fe } = await supabase
+    .from('firms')
+    .select('id,name,address,logo_url,created_at,deleted_at')
+    .eq('id', (profileRow as any).firm_id)
+    .single();
+  if (fe || !firmRow) return null;
+  if ((firmRow as any).deleted_at) return null; // firm has been deleted by VASTOS admin
 
-  const firm: Firm = {
-    id: session.firm.id,
-    name: session.firm.name,
-    address: session.firm.address ?? '',
-    logo_url: session.firm.logo_url ?? undefined,
-    gstin: session.firm.gstin ?? '',
-    payment_split_default: session.firm.payment_split_default ?? 0,
-    created_at: session.firm.created_at,
-  };
+  // 3/4/5 are independent of each other, so they run together rather than as
+  // three serial round-trips on the login path.
+  //
+  //   3. the crm_profile for role_id (RBAC) — matched by email+firm_id, not id
+  //      (profiles.id and crm_profiles.id are separate auto-generated UUIDs)
+  //   4. the subscription plan (seats_purchased overrides the plan's max_users)
+  //   5. platform-operator status. Resolved server-side from auth.uid() against
+  //      a deny-all allowlist; the client cannot assert it. Wrapped so that a
+  //      throw — network, RPC missing on an older database — yields false and
+  //      the console stays hidden. Fail closed.
+  const [{ data: crmRow }, { data: subRow }, isVastosOperator] = await Promise.all([
+    supabase
+      .from('crm_profiles')
+      .select('role_id')
+      .eq('email', (profileRow as any).email)
+      .eq('firm_id', (profileRow as any).firm_id)
+      .maybeSingle(),
+    (supabase as any)
+      .from('firm_subscriptions')
+      .select('status,trial_ends_at,plan_id,seats_purchased,subscription_plans(id,name,module_keys,max_users,max_projects,storage_gb)')
+      .eq('firm_id', (profileRow as any).firm_id)
+      .maybeSingle(),
+    (supabase as any)
+      .rpc('is_vastos_operator')
+      .then(({ data, error }: { data: unknown; error: unknown }) => (error ? false : data === true))
+      .catch(() => false),
+  ]);
 
-  const plan: SubscriptionPlan | null = session.plan
+  const planData = subRow ? (subRow as any).subscription_plans : null;
+  const plan: SubscriptionPlan | null = planData
     ? {
-        id: session.plan.id,
-        name: session.plan.name ?? '',
-        module_keys: session.plan.module_keys ?? [],
-        max_users: session.plan.max_users,
-        max_projects: session.plan.max_projects,
-        storage_gb: session.plan.storage_gb,
-        status: session.plan.status as SubscriptionPlan['status'],
-        trial_ends_at: session.plan.trial_ends_at,
+        id: planData.id,
+        name: planData.name,
+        module_keys: planData.module_keys ?? [],
+        max_users: (subRow as any).seats_purchased ?? planData.max_users,
+        max_projects: planData.max_projects,
+        storage_gb: planData.storage_gb,
+        status: (subRow as any).status,
+        trial_ends_at: (subRow as any).trial_ends_at,
       }
     : null;
 
-  // Same write-through scoping crmApi.hydrateAll used to set for us.
-  crm.setActiveFirm(firm.id);
-  store.hydrateFromPayload(data);
+  const profile: Profile = {
+    id: (profileRow as any).id,
+    firm_id: (profileRow as any).firm_id,
+    email: (profileRow as any).email,
+    full_name: (profileRow as any).full_name,
+    role: (profileRow as any).role,
+    phone: (profileRow as any).phone ?? null,
+    avatar_url: (profileRow as any).avatar_url ?? null,
+    created_at: (profileRow as any).created_at,
+    role_id: (crmRow as any)?.role_id ?? null,
+  };
 
-  return { profile, firm, plan, isVastosOperator: session.isVastosOperator };
+  const firm: Firm = {
+    id: (firmRow as any).id,
+    name: (firmRow as any).name,
+    address: (firmRow as any).address ?? '',
+    logo_url: (firmRow as any).logo_url ?? null,
+    gstin: (firmRow as any).gstin ?? '',
+    payment_split_default: (firmRow as any).payment_split_default ?? 0,
+    created_at: (firmRow as any).created_at,
+  };
+
+  return { profile, firm, plan, isVastosOperator };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -126,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        const resolved = await resolveSession();
+        const resolved = await resolveSession(session.user.id);
         if (resolved) enter(resolved.profile, resolved.firm, resolved.plan, resolved.isVastosOperator);
       }
       setIsLoading(false);
@@ -134,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const resolved = await resolveSession();
+        const resolved = await resolveSession(session.user.id);
         if (resolved) enter(resolved.profile, resolved.firm, resolved.plan, resolved.isVastosOperator);
       } else if (event === 'SIGNED_OUT') {
         store.reset(); // clear in-memory data so next login re-hydrates from DB

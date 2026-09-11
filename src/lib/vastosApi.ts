@@ -1,9 +1,7 @@
-// Client for vastos-api (NestJS on the VPS) — document upload/download via R2
-// presigned URLs, plus the /api/firm/bootstrap login-hydration endpoint
-// (Phase 5, item 2). Separate from FUNCTIONS_BASE_URL (Supabase edge
-// functions): this is a different service entirely.
+// Client for vastos-api (NestJS on Hetzner) — currently just document
+// upload/download via R2 presigned URLs. Separate from FUNCTIONS_BASE_URL
+// (Supabase edge functions): this is a different service entirely.
 import { supabase } from './supabase';
-import type { UserRole } from '../types';
 
 const VASTOS_API_URL = (import.meta as any).env?.VITE_VASTOS_API_URL as string | undefined;
 
@@ -24,7 +22,7 @@ interface PresignDownloadResult {
 
 async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   if (!VASTOS_API_URL) {
-    throw new Error('The Vastos API is not configured (VITE_VASTOS_API_URL is unset)');
+    throw new Error('Document uploads are not configured (VITE_VASTOS_API_URL is unset)');
   }
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not signed in');
@@ -71,60 +69,5 @@ export async function presignDownload(
   disposition: 'inline' | 'attachment' = 'inline',
 ): Promise<PresignDownloadResult> {
   const res = await authedFetch(`/documents/${documentId}/presign-download?disposition=${disposition}`);
-  return res.json();
-}
-
-// ── /api/firm/bootstrap ─────────────────────────────────────────────────────
-// One round trip for everything AuthContext + the DataStore need at login:
-// the resolved session (profile/firm/plan/operator flag) and every crm_*
-// table for the firm, already keyed by the DataStore's array names — see
-// vastos-api's src/firm/firm.service.ts. Replaces the old resolveSession()
-// (3 direct Supabase queries) + crmApi.hydrateAll() (24 parallel ones).
-export interface BootstrapProfile {
-  id: string;
-  firm_id: string;
-  email: string;
-  full_name: string;
-  role: UserRole;
-  role_id: string | null;
-  phone: string | null;
-  avatar_url: string | null;
-  created_at: string;
-}
-
-export interface BootstrapFirm {
-  id: string;
-  name: string;
-  address: string | null;
-  logo_url: string | null;
-  gstin: string | null;
-  payment_split_default: number;
-  created_at: string;
-}
-
-export interface BootstrapPlan {
-  id: string;
-  name: string | null;
-  module_keys: string[];
-  max_users: number | null;
-  max_projects: number | null;
-  storage_gb: number | null;
-  status: string;
-  trial_ends_at: string | null;
-}
-
-export interface BootstrapPayload {
-  session: {
-    profile: BootstrapProfile;
-    firm: BootstrapFirm;
-    plan: BootstrapPlan | null;
-    isVastosOperator: boolean;
-  };
-  // store-array name (e.g. "projects", "leads") → that table's firm-scoped rows
-  data: Record<string, any[]>;
-}
-
-export async function fetchBootstrap(): Promise<BootstrapPayload> {
-  const res = await authedFetch('/api/firm/bootstrap');
   return res.json();
 }
