@@ -128,3 +128,72 @@ export async function fetchBootstrap(): Promise<BootstrapPayload> {
   const res = await authedFetch('/api/firm/bootstrap');
   return res.json();
 }
+
+// ── /api/data/:table — generic CRUD (Phase 5, item 2.6+) ────────────────────
+// Server side of what supabase-js's .from(table).insert/update/delete() used
+// to do directly against PostgREST. Only tables vastos-api's db/table-
+// registry.ts has explicitly allowlisted will respond; everything else still
+// goes through crmApi.ts's supabase-js path until it's migrated too.
+export async function insertRow<T = any>(table: string, row: Record<string, any>): Promise<T> {
+  const res = await authedFetch(`/api/data/${table}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(row),
+  });
+  return res.json();
+}
+
+export async function updateRow<T = any>(table: string, id: string, patch: Record<string, any>): Promise<T> {
+  const res = await authedFetch(`/api/data/${table}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return res.json();
+}
+
+export async function updateWhereRows(
+  table: string,
+  match: Record<string, any>,
+  patch: Record<string, any>,
+): Promise<{ updated: number }> {
+  const res = await authedFetch(`/api/data/${table}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ match, patch }),
+  });
+  return res.json();
+}
+
+export async function deleteRow(table: string, id: string): Promise<void> {
+  await authedFetch(`/api/data/${table}/${id}`, { method: 'DELETE' });
+}
+
+export async function deleteWhereRows(table: string, match: Record<string, any>): Promise<{ deleted: number }> {
+  const res = await authedFetch(`/api/data/${table}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ match }),
+  });
+  return res.json();
+}
+
+export async function getOneRow<T = any>(table: string, id: string): Promise<T | null> {
+  try {
+    const res = await authedFetch(`/api/data/${table}/${id}`);
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ── /api/leads/:id/claim — atomic self-assignment ───────────────────────────
+export async function claimLead(leadId: string, userId: string): Promise<any | null> {
+  const res = await authedFetch(`/api/leads/${leadId}/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  });
+  const body = await res.json();
+  return body.ok ? body.lead : null;
+}

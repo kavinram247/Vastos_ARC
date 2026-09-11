@@ -3,8 +3,17 @@
 // Supabase-backed DataStore. Maps each store array to its crm_ table.
 // PostgREST returns `numeric` as strings; we coerce known numeric fields back
 // to numbers on hydration so the in-memory shape matches the app's expectations.
+//
+// Phase 5, item 2.6+: tables in MIGRATED_TABLES write through vastos-api's
+// generic /api/data/:table layer instead of supabase-js directly — see
+// vastosApi.ts. Reads for those tables already came from /api/firm/bootstrap
+// (AuthContext.resolveSession → store.hydrateFromPayload), so hydrateAll()
+// below is only ever reached as a fallback (see store.ts's hydrate()) and
+// still queries every table including the migrated ones — harmless, just
+// redundant if it ever runs.
 // ─────────────────────────────────────────────────────────────
 import { supabase } from './supabase';
+import * as vastosApi from './vastosApi';
 
 const sb = supabase as any;
 
@@ -37,6 +46,12 @@ export const TABLES = {
 } as const;
 export type StoreKey = keyof typeof TABLES;
 
+// Tables whose writes go through vastos-api's /api/data/:table instead of
+// supabase-js. Grow this set as each module's backend endpoints ship (Phase 5
+// item 2.6+ — leads first). vastos-api's db/table-registry.ts is the actual
+// allowlist enforced server-side; this just decides which client to call.
+const MIGRATED_TABLES: ReadonlySet<StoreKey> = new Set(['leads', 'leadInteractions', 'leadQuotations']);
+
 const NUMERIC_FIELDS = new Set([
   'project_value', 'total_amount', 'split_count', 'amount', 'gst_rate', 'gst_amount', 'total_with_gst',
   'estimated_cost', 'design_fees', 'supervision_fees', 'other_charges', 'estimated_budget', 'estimated_area',
@@ -66,6 +81,9 @@ function coerce(rows: any[]): any[] {
 // The predicate is added here anyway so the client and the database agree about
 // the boundary, and so a future policy regression is not silently the only thing
 // holding. Defence in depth, not the defence.
+//
+// The migrated (/api/data) path doesn't take a client-supplied firm_id at all —
+// RLS on the VPS is the only enforcement there, which is tighter, not looser.
 let activeFirmId: string | null = null;
 
 /** Called on hydration; scopes every subsequent write to this firm. */
@@ -91,31 +109,59 @@ export async function hydrateAll(firmId: string): Promise<Record<StoreKey, any[]
 
 // ── write-through helpers (fire-and-forget; log on failure) ──
 export function persistInsert(key: StoreKey, row: any) {
+  if (MIGRATED_TABLES.has(key)) {
+    vastosApi.insertRow(TABLES[key], row).catch((e) => console.error(`insert ${TABLES[key]}`, e.message));
+    return;
+  }
   sb.from(TABLES[key]).insert(row).then(({ error }: any) => { if (error) console.error(`insert ${TABLES[key]}`, error.message); });
 }
 export function persistUpsert(key: StoreKey, row: any) {
   sb.from(TABLES[key]).upsert(row, { onConflict: 'id' }).then(({ error }: any) => { if (error) console.error(`upsert ${TABLES[key]}`, error.message); });
 }
 export function persistUpdate(key: StoreKey, id: string, patch: any) {
+  if (MIGRATED_TABLES.has(key)) {
+    vastosApi.updateRow(TABLES[key], id, patch).catch((e) => console.error(`update ${TABLES[key]}`, e.message));
+    return;
+  }
   scoped(sb.from(TABLES[key]).update(patch).eq('id', id)).then(({ error }: any) => { if (error) console.error(`update ${TABLES[key]}`, error.message); });
 }
 export async function awaitUpdate(key: StoreKey, id: string, patch: any): Promise<string | null> {
+  if (MIGRATED_TABLES.has(key)) {
+    try { await vastosApi.updateRow(TABLES[key], id, patch); return null; }
+    catch (e: any) { return e.message ?? 'update failed'; }
+  }
   const { error } = await scoped(sb.from(TABLES[key]).update(patch).eq('id', id));
   return error?.message ?? null;
 }
 export async function awaitInsert(key: StoreKey, row: any): Promise<string | null> {
+  if (MIGRATED_TABLES.has(key)) {
+    try { await vastosApi.insertRow(TABLES[key], row); return null; }
+    catch (e: any) { return e.message ?? 'insert failed'; }
+  }
   const { error } = await sb.from(TABLES[key]).insert(row);
   return error?.message ?? null;
 }
 export function persistUpdateWhere(key: StoreKey, match: Record<string, any>, patch: any) {
+  if (MIGRATED_TABLES.has(key)) {
+    vastosApi.updateWhereRows(TABLES[key], match, patch).catch((e) => console.error(`updateWhere ${TABLES[key]}`, e.message));
+    return;
+  }
   let q = sb.from(TABLES[key]).update(patch);
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
   scoped(q).then(({ error }: any) => { if (error) console.error(`updateWhere ${TABLES[key]}`, error.message); });
 }
 export function persistDelete(key: StoreKey, id: string) {
+  if (MIGRATED_TABLES.has(key)) {
+    vastosApi.deleteRow(TABLES[key], id).catch((e) => console.error(`delete ${TABLES[key]}`, e.message));
+    return;
+  }
   scoped(sb.from(TABLES[key]).delete().eq('id', id)).then(({ error }: any) => { if (error) console.error(`delete ${TABLES[key]}`, error.message); });
 }
 export function persistDeleteWhere(key: StoreKey, match: Record<string, any>) {
+  if (MIGRATED_TABLES.has(key)) {
+    vastosApi.deleteWhereRows(TABLES[key], match).catch((e) => console.error(`deleteWhere ${TABLES[key]}`, e.message));
+    return;
+  }
   let q = sb.from(TABLES[key]).delete();
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
   scoped(q).then(({ error }: any) => { if (error) console.error(`deleteWhere ${TABLES[key]}`, error.message); });
@@ -126,20 +172,15 @@ export function persistDeleteWhere(key: StoreKey, match: Record<string, any>) {
 // never both win: Postgres evaluates the predicate atomically, so exactly one
 // UPDATE matches. Returns the winning row on success, null when already taken,
 // or throws on a transport error. `null` lets the caller fetch the true owner.
-export async function claimLeadRow(leadId: string, userId: string, updatedAt: string): Promise<any | null> {
-  const { data, error } = await sb
-    .from(TABLES.leads)
-    .update({ assigned_to: userId, updated_at: updatedAt })
-    .eq('id', leadId)
-    .is('assigned_to', null)
-    .select();
-  if (error) throw new Error(error.message);
-  return data && data.length > 0 ? data[0] : null;
+// `leads` is a migrated table — this always goes through vastos-api's
+// dedicated /api/leads/:id/claim (the server sets updated_at itself; the
+// updatedAt param is kept for call-site compatibility, unused here).
+export async function claimLeadRow(leadId: string, userId: string, _updatedAt: string): Promise<any | null> {
+  return vastosApi.claimLead(leadId, userId);
 }
 
 /** Read a single lead row back from the DB (used to reconcile after a lost claim race). */
 export async function fetchLeadRow(leadId: string): Promise<any | null> {
-  const { data, error } = await sb.from(TABLES.leads).select('*').eq('id', leadId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? coerce([data])[0] : null;
+  const row = await vastosApi.getOneRow(TABLES.leads, leadId);
+  return row ? coerce([row])[0] : null;
 }
