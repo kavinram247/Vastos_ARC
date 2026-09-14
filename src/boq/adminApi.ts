@@ -3,6 +3,16 @@
 // VERSIONED (new rate_cards row, valid_from today) to preserve audit history;
 // resolve_rate() / the latest-by-valid_from query always returns the current rate.
 //
+// Phase 5, item 2.8: calls vastos-api's /api/boq/admin/* instead of Supabase
+// — see vastos-api's src/boq/boq-admin.service.ts (catalogue rates/margins/
+// regions) and boq-admin-templates.service.ts (templates/rules). Every write
+// still proxies to the same SECURITY DEFINER RPCs as before (see H2b note
+// below); the server just calls them over a pooled pg connection instead of
+// supabase-js. Signatures unchanged (including now-unused firmId params) so
+// AdminPage.tsx needs no changes. fetchRegionAdmin reuses the existing
+// /api/boq/regions endpoint (boq/api.ts's fetchRegions) — identical query,
+// no reason for a second one.
+//
 // Audit H2b: the catalogue is SHARED. Global rows (firm_id IS NULL) are now
 // read-only to every tenant — a firm owner used to be able to reprice every
 // other firm's estimates through them. Editing one is copy-on-write instead:
@@ -16,12 +26,9 @@
 //                 rules into the firm on first edit, and reads come from
 //                 module_templates_effective, which shows the fork in place of
 //                 the global it was forked from.
-//
-// Writing catalog_products / module_templates / module_rules directly still
-// compiles, and will silently affect zero rows for a global row. Go through
-// the helpers below.
 // ─────────────────────────────────────────────────────────────
-import { supabase } from '../lib/supabase';
+import { vastosApiFetch } from '../lib/vastosApi';
+import type { RegionRow } from './api';
 
 export interface SkuRow { sku_id: string; brand: string | null; grade: string; current_rate: number | null }
 export interface MaterialRow {
@@ -29,125 +36,64 @@ export interface MaterialRow {
   waste_factor: number; gst_rate: number; skus: SkuRow[];
 }
 
-export async function fetchMaterialRows(firmId: string): Promise<MaterialRow[]> {
-  const [{ data: cats, error: ec }, { data: products, error: ep }, { data: skus, error: es }, { data: rates, error: er }] = await Promise.all([
-    supabase.from('catalog_categories').select('id,name,path'),
-    supabase.from('catalog_products_effective').select('id,name,category_id,base_uom,waste_factor,gst_rate').order('name'),
-    supabase.from('product_skus').select('id,product_id,brand,quality_grade'),
-    supabase.from('rate_cards').select('sku_id,rate,valid_from').eq('firm_id', firmId).is('region_id', null).not('sku_id', 'is', null).order('valid_from', { ascending: false }),
-  ]);
-  for (const e of [ec, ep, es, er]) if (e) throw e;
-
-  const catName = new Map<string, string>();
-  for (const c of (cats || []) as any[]) catName.set(c.id, c.name);
-
-  // latest rate per sku
-  const latest = new Map<string, number>();
-  for (const r of (rates || []) as any[]) if (!latest.has(r.sku_id)) latest.set(r.sku_id, Number(r.rate));
-
-  const byProduct = new Map<string, SkuRow[]>();
-  for (const s of (skus || []) as any[]) {
-    const arr = byProduct.get(s.product_id) || [];
-    arr.push({ sku_id: s.id, brand: s.brand, grade: s.quality_grade, current_rate: latest.has(s.id) ? latest.get(s.id)! : null });
-    byProduct.set(s.product_id, arr);
-  }
-
-  return (products || []).map((p: any) => ({
-    product_id: p.id, name: p.name, category: catName.get(p.category_id) || '—',
-    base_uom: p.base_uom, waste_factor: Number(p.waste_factor), gst_rate: Number(p.gst_rate),
-    skus: byProduct.get(p.id) || [],
-  }));
+export async function fetchMaterialRows(_firmId: string): Promise<MaterialRow[]> {
+  return vastosApiFetch('/api/boq/admin/materials');
 }
 
-export async function saveMaterialRate(skuId: string, rate: number, firmId: string) {
-  const { error } = await supabase.from('rate_cards').insert({
-    firm_id: firmId, sku_id: skuId, region_id: null, rate, valid_from: new Date().toISOString().slice(0, 10), source: 'manual',
-  } as any);
-  if (error) throw error;
+export async function saveMaterialRate(skuId: string, rate: number, _firmId: string) {
+  await vastosApiFetch(`/api/boq/admin/materials/${skuId}/rate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rate }),
+  });
 }
 
 // Copy-on-write (H2b). The RPC updates in place when the product belongs to
 // this firm and writes an override when it is a shared global row; the caller
 // does not need to know which.
 export async function saveProductWaste(productId: string, waste: number) {
-  const { error } = await (supabase as any).rpc('catalog_product_override_set', {
-    p_product_id: productId,
-    p_patch: { waste_factor: waste },
+  await vastosApiFetch(`/api/boq/admin/products/${productId}/override`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ waste }),
   });
-  if (error) throw error;
 }
 
 /** Drop this firm's override and follow the shared catalogue again (H2b). */
 export async function clearProductOverride(productId: string) {
-  const { error } = await (supabase as any).rpc('catalog_product_override_clear', {
-    p_product_id: productId,
-  });
-  if (error) throw error;
+  await vastosApiFetch(`/api/boq/admin/products/${productId}/override`, { method: 'DELETE' });
 }
 
 export interface LabourRow { activity_id: string; code: string; name: string; base_uom: string; trade: string | null; current_rate: number | null }
 
-export async function fetchLabourRows(firmId: string): Promise<LabourRow[]> {
-  const [{ data: acts, error: ea }, { data: rates, error: er }] = await Promise.all([
-    supabase.from('labour_activities').select('id,code,name,base_uom,trade').order('trade'),
-    supabase.from('rate_cards').select('labour_activity_id,rate,valid_from').eq('firm_id', firmId).is('region_id', null).not('labour_activity_id', 'is', null).order('valid_from', { ascending: false }),
-  ]);
-  for (const e of [ea, er]) if (e) throw e;
-  const latest = new Map<string, number>();
-  for (const r of (rates || []) as any[]) if (!latest.has(r.labour_activity_id)) latest.set(r.labour_activity_id, Number(r.rate));
-  return (acts || []).map((a: any) => ({
-    activity_id: a.id, code: a.code, name: a.name, base_uom: a.base_uom, trade: a.trade,
-    current_rate: latest.has(a.id) ? latest.get(a.id)! : null,
-  }));
+export async function fetchLabourRows(_firmId: string): Promise<LabourRow[]> {
+  return vastosApiFetch('/api/boq/admin/labour');
 }
 
-export async function saveLabourRate(activityId: string, rate: number, firmId: string) {
-  const { error } = await supabase.from('rate_cards').insert({
-    firm_id: firmId, labour_activity_id: activityId, region_id: null, rate, valid_from: new Date().toISOString().slice(0, 10), source: 'manual',
-  } as any);
-  if (error) throw error;
+export async function saveLabourRate(activityId: string, rate: number, _firmId: string) {
+  await vastosApiFetch(`/api/boq/admin/labour/${activityId}/rate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rate }),
+  });
 }
 
 export interface MarginRow { id: string; target_margin_pct: number; margin_floor_pct: number; overhead_pct: number }
-export async function fetchMargin(firmId: string): Promise<MarginRow | null> {
-  const { data, error } = await supabase.from('margin_policies').select('id,target_margin_pct,margin_floor_pct,overhead_pct')
-    .eq('firm_id', firmId).is('category_id', null).is('grade', null).limit(1);
-  if (error) throw error;
-  const m = (data as any[])[0];
-  return m ? { id: m.id, target_margin_pct: Number(m.target_margin_pct), margin_floor_pct: Number(m.margin_floor_pct), overhead_pct: Number(m.overhead_pct) } : null;
+export async function fetchMargin(_firmId: string): Promise<MarginRow | null> {
+  return vastosApiFetch('/api/boq/admin/margin');
 }
 export async function saveMargin(id: string, m: { target_margin_pct: number; margin_floor_pct: number; overhead_pct: number }) {
-  const { error } = await supabase.from('margin_policies').update(m as any).eq('id', id);
-  if (error) throw error;
+  await vastosApiFetch(`/api/boq/admin/margin/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m),
+  });
 }
 /** Fetch the firm-wide default margin policy, creating a sensible default if none exists (self-heals after a data reset). */
-export async function ensureMargin(firmId: string): Promise<MarginRow | null> {
-  const existing = await fetchMargin(firmId);
-  if (existing) return existing;
-  const row: any = {
-    id: (globalThis.crypto as any)?.randomUUID?.() ?? undefined,
-    firm_id: firmId, category_id: null, grade: null,
-    target_margin_pct: 35, margin_floor_pct: 18, overhead_pct: 8,
-  };
-  const { data, error } = await supabase.from('margin_policies').insert(row)
-    .select('id,target_margin_pct,margin_floor_pct,overhead_pct').single();
-  if (error) { console.error('ensureMargin: could not create default policy', error.message); return null; }
-  const m = data as any;
-  return { id: m.id, target_margin_pct: Number(m.target_margin_pct), margin_floor_pct: Number(m.margin_floor_pct), overhead_pct: Number(m.overhead_pct) };
+export async function ensureMargin(_firmId: string): Promise<MarginRow | null> {
+  return vastosApiFetch('/api/boq/admin/margin/ensure', { method: 'POST' });
 }
 
 export interface RegionAdminRow { id: string; name: string; material_index: number; labour_index: number; logistics_index: number; availability_risk: number }
-export async function fetchRegionAdmin(firmId: string): Promise<RegionAdminRow[]> {
-  const { data, error } = await supabase.from('regions').select('id,name,material_index,labour_index,logistics_index,availability_risk').eq('firm_id', firmId).order('name');
-  if (error) throw error;
-  return (data as any[]).map((r) => ({
-    id: r.id, name: r.name, material_index: Number(r.material_index), labour_index: Number(r.labour_index),
-    logistics_index: Number(r.logistics_index), availability_risk: Number(r.availability_risk),
-  }));
+export async function fetchRegionAdmin(_firmId: string): Promise<RegionAdminRow[]> {
+  return vastosApiFetch<RegionRow[]>('/api/boq/regions');
 }
 export async function saveRegion(id: string, r: { material_index: number; labour_index: number; logistics_index: number; availability_risk: number }) {
-  const { error } = await supabase.from('regions').update(r as any).eq('id', id);
-  if (error) throw error;
+  await vastosApiFetch(`/api/boq/admin/regions/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
+  });
 }
 
 // ── Templates & Rules admin ────────────────────────────────────
@@ -167,23 +113,7 @@ export interface TemplateAdminRow {
 }
 
 export async function fetchTemplatesAdmin(): Promise<TemplateAdminRow[]> {
-  const [{ data: tpls, error: e1 }, { data: rules, error: e2 }] = await Promise.all([
-    supabase.from('module_templates_effective').select('id,code,name,category,description,param_schema,derived_vars,is_active').order('name'),
-    supabase.from('module_rules').select('id,template_id,seq,output_kind,product_id,labour_activity_id,label,condition,qty_formula,uom').order('seq'),
-  ]);
-  if (e1) throw e1; if (e2) throw e2;
-  const byTpl = new Map<string, RuleAdminRow[]>();
-  for (const r of (rules || []) as any[]) {
-    const arr = byTpl.get(r.template_id) || [];
-    arr.push(r as RuleAdminRow);
-    byTpl.set(r.template_id, arr);
-  }
-  return (tpls || []).map((t: any) => ({
-    id: t.id, code: t.code, name: t.name, category: t.category,
-    description: t.description, param_schema: t.param_schema || {},
-    derived_vars: Array.isArray(t.derived_vars) ? t.derived_vars : [],
-    is_active: t.is_active, rules: byTpl.get(t.id) || [],
-  }));
+  return vastosApiFetch('/api/boq/admin/templates');
 }
 
 // Fork-on-write (H2b). Each of these returns the template id to use from now
@@ -191,26 +121,24 @@ export async function fetchTemplatesAdmin(): Promise<TemplateAdminRow[]> {
 // id changes on that first edit. Callers reload from fetchTemplatesAdmin()
 // afterwards, which resolves the fork in place of the global.
 export async function updateTemplateActive(id: string, is_active: boolean): Promise<string> {
-  const { data, error } = await (supabase as any).rpc('module_template_set_meta', {
-    p_template_id: id, p_patch: { is_active },
+  const { id: tplId } = await vastosApiFetch<{ id: string }>(`/api/boq/admin/templates/${id}/active`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active }),
   });
-  if (error) throw error;
-  return data as string;
+  return tplId;
 }
 
 export async function saveTemplateMeta(id: string, data: { name: string; description: string; category: string; derived_vars: any[]; param_schema: any }): Promise<string> {
-  const { data: tplId, error } = await (supabase as any).rpc('module_template_set_meta', {
-    p_template_id: id, p_patch: data,
+  const { id: tplId } = await vastosApiFetch<{ id: string }>(`/api/boq/admin/templates/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   });
-  if (error) throw error;
-  return tplId as string;
+  return tplId;
 }
 
-export async function createTemplateFull(data: { code: string; name: string; category: string; description: string; param_schema: any; derived_vars: any[] }, firmId: string): Promise<string> {
-  const { data: row, error } = await supabase.from('module_templates')
-    .insert({ ...data, firm_id: firmId, is_active: true } as any).select('id').single();
-  if (error) throw error;
-  return (row as any).id;
+export async function createTemplateFull(data: { code: string; name: string; category: string; description: string; param_schema: any; derived_vars: any[] }, _firmId: string): Promise<string> {
+  const { id } = await vastosApiFetch<{ id: string }>('/api/boq/admin/templates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+  return id;
 }
 
 // Rules belong to a template and inherit its tenancy (H2b), so these fork the
@@ -218,41 +146,29 @@ export async function createTemplateFull(data: { code: string; name: string; cat
 // the RPC locates the counterpart in the fork by `seq` and returns the ids to
 // use from now on.
 export async function saveRule(rule: Omit<RuleAdminRow, 'id'>): Promise<RuleAdminRow> {
-  const { data, error } = await (supabase as any).rpc('module_rule_save', {
-    p_rule_id: null, p_template_id: rule.template_id, p_data: rule,
+  const { template_id, rule_id } = await vastosApiFetch<{ template_id: string; rule_id: string }>('/api/boq/admin/rules', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rule),
   });
-  if (error) throw error;
-  return { ...rule, id: data.rule_id, template_id: data.template_id } as RuleAdminRow;
+  return { ...rule, id: rule_id, template_id } as RuleAdminRow;
 }
 
 export async function updateRule(id: string, data: Partial<Omit<RuleAdminRow, 'id'>>): Promise<{ template_id: string; rule_id: string }> {
-  const { data: res, error } = await (supabase as any).rpc('module_rule_save', {
-    p_rule_id: id, p_template_id: data.template_id ?? null, p_data: data,
+  return vastosApiFetch(`/api/boq/admin/rules/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   });
-  if (error) throw error;
-  return res as { template_id: string; rule_id: string };
 }
 
 export async function deleteRule(id: string): Promise<{ template_id: string }> {
-  const { data, error } = await (supabase as any).rpc('module_rule_delete', { p_rule_id: id });
-  if (error) throw error;
-  return data as { template_id: string };
+  return vastosApiFetch(`/api/boq/admin/rules/${id}`, { method: 'DELETE' });
 }
 
 export interface ProductSimple { id: string; name: string; base_uom: string; category: string }
 export interface LabourSimple { id: string; name: string; code: string; base_uom: string; trade: string | null }
 
 export async function fetchProductsSimple(): Promise<ProductSimple[]> {
-  const [{ data: cats }, { data: prods }] = await Promise.all([
-    supabase.from('catalog_categories').select('id,name'),
-    supabase.from('catalog_products_effective').select('id,name,base_uom,category_id').eq('is_active', true).order('name'),
-  ]);
-  const catName = new Map(((cats || []) as any[]).map((c: any) => [c.id, c.name]));
-  return ((prods || []) as any[]).map((p: any) => ({ id: p.id, name: p.name, base_uom: p.base_uom, category: catName.get(p.category_id) || '' }));
+  return vastosApiFetch('/api/boq/admin/products-simple');
 }
 
 export async function fetchLabourSimple(): Promise<LabourSimple[]> {
-  const { data, error } = await supabase.from('labour_activities').select('id,name,code,base_uom,trade').order('name');
-  if (error) throw error;
-  return ((data || []) as any[]).map((a: any) => ({ id: a.id, name: a.name, code: a.code, base_uom: a.base_uom, trade: a.trade }));
+  return vastosApiFetch('/api/boq/admin/labour-simple');
 }
