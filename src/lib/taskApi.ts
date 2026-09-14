@@ -1,8 +1,21 @@
 // ─────────────────────────────────────────────────────────────
 // Tasks data access — the operational task system for internal staff.
-// Supabase-backed, firm-scoped. Assignee / creator / project / CRM-link ids
-// reference the legacy in-memory profile/project/lead/etc. ids as TEXT (mock
-// auth — non-owner users don't exist as Supabase profiles yet).
+// Firm-scoped. Assignee / creator / project / CRM-link ids reference the
+// legacy in-memory profile/project/lead/etc. ids as TEXT (mock auth —
+// non-owner users don't exist as Supabase profiles yet).
+//
+// Phase 5, item 2.9: calls vastos-api instead of Supabase. Writes on
+// tasks/task_lists/task_subtasks/task_activity go through the generic
+// /api/data/:table layer (insertRow/updateRow/updateWhereRows/deleteRow in
+// vastosApi.ts) — plain single-table CRUD, same as the leads module.
+// task_assign_privileges needs upsert-on-conflict, which that generic layer
+// doesn't have, so it gets two small dedicated endpoints instead. The five
+// list*() reads are dedicated GET endpoints too (vastos-api's
+// src/tasks/tasks.service.ts) — the generic layer has only ever supported
+// get-one-by-id, never a filtered/ordered list. Every default-computation
+// (WRITABLE merge, order_index, completed_at derivation) and the
+// fire-and-forget activity-log side effect on create are unchanged, still
+// entirely client-side; only the transport underneath moved.
 //
 // Model (migration 27_tasks_redesign):
 //   tasks          — rich task rows (status/priority/dates/links/tags/notes…)
@@ -10,7 +23,7 @@
 //   task_subtasks  — checklist items
 //   task_activity  — timeline entries + comments (kind='comment')
 // ─────────────────────────────────────────────────────────────
-import { supabase } from './supabase';
+import { vastosApiFetch, insertRow, updateRow, updateWhereRows, deleteRow } from './vastosApi';
 
 export type TaskStatus = 'not_started' | 'in_progress' | 'waiting' | 'completed' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
@@ -143,13 +156,9 @@ function normalizeTask(row: any): Task {
 }
 
 // ─── TASKS ───
-export async function listTasks(firmId: string): Promise<Task[]> {
-  const { data, error } = await supabase
-    .from('tasks').select('*').eq('firm_id', firmId)
-    .order('order_index', { ascending: true })
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(normalizeTask);
+export async function listTasks(_firmId: string): Promise<Task[]> {
+  const rows = await vastosApiFetch<any[]>('/api/tasks');
+  return rows.map(normalizeTask);
 }
 
 export async function createTask(
@@ -180,8 +189,7 @@ export async function createTask(
     'notes', 'list_id', 'link_type', 'link_id', 'link_label'] as const) {
     if (payload[k] === undefined) payload[k] = (input as any)[k] ?? null;
   }
-  const { data, error } = await supabase.from('tasks').insert(payload as any).select('*').single();
-  if (error) throw error;
+  const data = await insertRow<any>('tasks', payload);
   const task = normalizeTask(data);
   logActivity(task.id, createdBy, 'created', input.title.trim(), firmId).catch(() => {});
   return task;
@@ -194,19 +202,15 @@ export async function updateTask(id: string, patch: Partial<TaskInput>): Promise
     fields.completed_at = patch.status === 'completed' ? nowISO() : null;
     if (patch.status === 'completed' && patch.progress === undefined) fields.progress = 100;
   }
-  const { error } = await supabase.from('tasks').update(fields as any).eq('id', id);
-  if (error) throw error;
+  await updateRow('tasks', id, fields);
 }
 
 export async function setArchived(id: string, archived: boolean): Promise<void> {
-  const { error } = await supabase.from('tasks')
-    .update({ archived_at: archived ? nowISO() : null, updated_at: nowISO() } as any).eq('id', id);
-  if (error) throw error;
+  await updateRow('tasks', id, { archived_at: archived ? nowISO() : null, updated_at: nowISO() });
 }
 
 export async function deleteTask(id: string): Promise<void> {
-  const { error } = await supabase.from('tasks').delete().eq('id', id);
-  if (error) throw error;
+  await deleteRow('tasks', id);
 }
 
 /** Bulk status / list / priority / archive changes from the multi-select bar. */
@@ -214,102 +218,79 @@ export async function bulkUpdate(ids: string[], patch: Partial<TaskInput> & { ar
   if (!ids.length) return;
   const fields: Record<string, any> = { ...patch, updated_at: nowISO() };
   if ('status' in patch) fields.completed_at = patch.status === 'completed' ? nowISO() : null;
-  const { error } = await supabase.from('tasks').update(fields as any).in('id', ids);
-  if (error) throw error;
+  await updateWhereRows('tasks', { id: ids }, fields);
 }
 
 // ─── LISTS ───
-export async function listTaskLists(firmId: string): Promise<TaskList[]> {
-  const { data, error } = await supabase
-    .from('task_lists').select('*').eq('firm_id', firmId).order('order_index', { ascending: true });
-  if (error) throw error;
-  return (data || []) as any as TaskList[];
+export async function listTaskLists(_firmId: string): Promise<TaskList[]> {
+  return vastosApiFetch('/api/tasks/lists');
 }
 
 export async function createTaskList(
   input: { name: string; color?: string; icon?: string | null }, createdBy: string, firmId: string,
 ): Promise<TaskList> {
-  const { data, error } = await supabase.from('task_lists').insert({
+  return insertRow<TaskList>('task_lists', {
     firm_id: firmId, name: input.name.trim(), color: input.color || 'slate',
     icon: input.icon || null, order_index: Date.now() % 100000, created_by: createdBy,
-  } as any).select('*').single();
-  if (error) throw error;
-  return data as any as TaskList;
+  });
 }
 
 export async function updateTaskList(id: string, patch: Partial<Pick<TaskList, 'name' | 'color' | 'icon' | 'order_index'>>): Promise<void> {
-  const { error } = await supabase.from('task_lists').update(patch as any).eq('id', id);
-  if (error) throw error;
+  await updateRow('task_lists', id, patch);
 }
 
 export async function deleteTaskList(id: string): Promise<void> {
   // tasks.list_id is ON DELETE SET NULL → tasks survive, just unlinked.
-  const { error } = await supabase.from('task_lists').delete().eq('id', id);
-  if (error) throw error;
+  await deleteRow('task_lists', id);
 }
 
 // ─── SUBTASKS ───
-export async function listSubtasks(firmId: string): Promise<Subtask[]> {
-  const { data, error } = await supabase
-    .from('task_subtasks').select('*').eq('firm_id', firmId).order('order_index', { ascending: true });
-  if (error) throw error;
-  return (data || []) as any as Subtask[];
+export async function listSubtasks(_firmId: string): Promise<Subtask[]> {
+  return vastosApiFetch('/api/tasks/subtasks');
 }
 
 export async function addSubtask(taskId: string, title: string, orderIndex: number, firmId: string): Promise<Subtask> {
-  const { data, error } = await supabase.from('task_subtasks').insert({
+  return insertRow<Subtask>('task_subtasks', {
     firm_id: firmId, task_id: taskId, title: title.trim(), order_index: orderIndex,
-  } as any).select('*').single();
-  if (error) throw error;
-  return data as any as Subtask;
+  });
 }
 
 export async function updateSubtask(id: string, patch: Partial<Pick<Subtask, 'title' | 'done' | 'order_index'>>): Promise<void> {
-  const { error } = await supabase.from('task_subtasks').update(patch as any).eq('id', id);
-  if (error) throw error;
+  await updateRow('task_subtasks', id, patch);
 }
 
 export async function deleteSubtask(id: string): Promise<void> {
-  const { error } = await supabase.from('task_subtasks').delete().eq('id', id);
-  if (error) throw error;
+  await deleteRow('task_subtasks', id);
 }
 
 // ─── ACTIVITY ───
 export async function listActivity(taskId: string): Promise<TaskActivity[]> {
-  const { data, error } = await supabase
-    .from('task_activity').select('*').eq('task_id', taskId).order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data || []) as any as TaskActivity[];
+  return vastosApiFetch(`/api/tasks/activity/${taskId}`);
 }
 
 export async function logActivity(
   taskId: string, actor: { id: string; name: string }, kind: ActivityKind, detail: string | null, firmId: string,
 ): Promise<void> {
-  const { error } = await supabase.from('task_activity').insert({
+  await insertRow('task_activity', {
     firm_id: firmId, task_id: taskId, actor_id: actor.id, actor_name: actor.name, kind, detail,
-  } as any);
-  if (error) throw error;
+  });
 }
 
 // ─── ASSIGN PRIVILEGES (carried over) ───
-export async function listAssignPrivileges(firmId: string): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from('task_assign_privileges').select('user_id').eq('firm_id', firmId);
-  if (error) throw error;
-  return new Set(((data || []) as any[]).map((r) => r.user_id));
+export async function listAssignPrivileges(_firmId: string): Promise<Set<string>> {
+  const userIds = await vastosApiFetch<string[]>('/api/tasks/assign-privileges');
+  return new Set(userIds);
 }
 
 export async function setAssignPrivilege(
-  userId: string, userName: string, granted: boolean, grantedBy: string, firmId: string,
+  userId: string, userName: string, granted: boolean, grantedBy: string, _firmId: string,
 ): Promise<void> {
   if (granted) {
-    const { error } = await supabase.from('task_assign_privileges')
-      .upsert({ firm_id: firmId, user_id: userId, user_name: userName, granted_by: grantedBy } as any,
-        { onConflict: 'firm_id,user_id' });
-    if (error) throw error;
+    await vastosApiFetch('/api/tasks/assign-privileges', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, userName, grantedBy }),
+    });
   } else {
-    const { error } = await supabase.from('task_assign_privileges')
-      .delete().eq('firm_id', firmId).eq('user_id', userId);
-    if (error) throw error;
+    await vastosApiFetch(`/api/tasks/assign-privileges/${userId}`, { method: 'DELETE' });
   }
 }
