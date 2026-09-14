@@ -2,8 +2,18 @@
 // Attendance register data access. One record per employee per day, with
 // check-in / check-out timestamps + device GPS. Self check-in/out and owner
 // override. References the legacy in-memory profile id as TEXT.
+//
+// Phase 5, item 2.10: calls vastos-api instead of Supabase. checkOut()/
+// deleteAttendance() go through the generic /api/data/attendance_records
+// layer (plain update/delete by id, RLS-scoped) — same pattern as leads/
+// tasks. checkIn()/saveManualAttendance() are upserts on
+// (firm_id,user_id,work_date), which that generic layer has no primitive
+// for, so they call vastos-api's src/attendance/ module instead, same as
+// listAttendance/getTodayRecord (filtered reads the generic layer has never
+// supported — it only ever did get-one-by-id). Signatures unchanged so
+// AttendancePage.tsx needs no changes.
 // ─────────────────────────────────────────────────────────────
-import { supabase } from './supabase';
+import { vastosApiFetch, updateRow, deleteRow } from './vastosApi';
 
 export type AttendanceStatus = 'present' | 'absent' | 'leave' | 'half_day';
 
@@ -45,49 +55,39 @@ export function mapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
-const SELECT = 'id,user_id,user_name,work_date,status,check_in_at,check_in_lat,check_in_lng,check_in_accuracy,check_in_label,check_out_at,check_out_lat,check_out_lng,check_out_accuracy,check_out_label,notes,marked_by';
+const nowISO = () => new Date().toISOString();
 
-export async function listAttendance(opts: { from?: string; to?: string; userId?: string } = {}, firmId: string): Promise<AttendanceRecord[]> {
-  let q = supabase.from('attendance_records').select(SELECT).eq('firm_id', firmId);
-  if (opts.from) q = q.gte('work_date', opts.from);
-  if (opts.to) q = q.lte('work_date', opts.to);
-  if (opts.userId) q = q.eq('user_id', opts.userId);
-  const { data, error } = await q.order('work_date', { ascending: false });
-  if (error) throw error;
-  return (data || []) as any as AttendanceRecord[];
+export async function listAttendance(opts: { from?: string; to?: string; userId?: string } = {}, _firmId: string): Promise<AttendanceRecord[]> {
+  const qs = new URLSearchParams();
+  if (opts.from) qs.set('from', opts.from);
+  if (opts.to) qs.set('to', opts.to);
+  if (opts.userId) qs.set('userId', opts.userId);
+  const query = qs.toString();
+  return vastosApiFetch(`/api/attendance${query ? `?${query}` : ''}`);
 }
 
 /** Today's record for a user, or null. */
-export async function getTodayRecord(userId: string, firmId: string): Promise<AttendanceRecord | null> {
-  const { data, error } = await supabase.from('attendance_records').select(SELECT)
-    .eq('firm_id', firmId).eq('user_id', userId).eq('work_date', today()).maybeSingle();
-  if (error) throw error;
-  return (data as any) || null;
+export async function getTodayRecord(userId: string, _firmId: string): Promise<AttendanceRecord | null> {
+  return vastosApiFetch(`/api/attendance/today?userId=${encodeURIComponent(userId)}`);
 }
 
 export async function checkIn(
-  user: { id: string; name: string }, geo: GeoFix | null, label: string | null, markedBy: string, firmId: string,
+  user: { id: string; name: string }, geo: GeoFix | null, label: string | null, markedBy: string, _firmId: string,
 ): Promise<void> {
-  const { error } = await supabase.from('attendance_records').upsert({
-    firm_id: firmId, user_id: user.id, user_name: user.name, work_date: today(), status: 'present',
-    check_in_at: new Date().toISOString(),
-    check_in_lat: geo?.lat ?? null, check_in_lng: geo?.lng ?? null, check_in_accuracy: geo?.accuracy ?? null,
-    check_in_label: label || null, marked_by: markedBy, updated_at: new Date().toISOString(),
-  } as any, { onConflict: 'firm_id,user_id,work_date' });
-  if (error) throw error;
+  await vastosApiFetch('/api/attendance/check-in', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user, geo, label, markedBy }),
+  });
 }
 
-// firmId is required (audit H2): these matched on id alone, so any harvested
-// record id addressed a row. RLS already refuses cross-firm writes; this makes
-// the client agree with it rather than depend on it.
-export async function checkOut(recordId: string, geo: GeoFix | null, label: string | null, firmId: string): Promise<void> {
-  const { error } = await supabase.from('attendance_records').update({
-    check_out_at: new Date().toISOString(),
+// firmId is unused now — RLS scopes the update by id regardless of what the
+// client sends, same as every other migrated write this phase.
+export async function checkOut(recordId: string, geo: GeoFix | null, label: string | null, _firmId: string): Promise<void> {
+  await updateRow('attendance_records', recordId, {
+    check_out_at: nowISO(),
     check_out_lat: geo?.lat ?? null, check_out_lng: geo?.lng ?? null, check_out_accuracy: geo?.accuracy ?? null,
-    check_out_label: label || null, updated_at: new Date().toISOString(),
-  } as any).eq('id', recordId).eq('firm_id', firmId);
-  if (error) throw error;
+    check_out_label: label || null, updated_at: nowISO(),
+  });
 }
 
 export interface ManualAttendanceInput {
@@ -104,18 +104,13 @@ export interface ManualAttendanceInput {
 }
 
 /** Owner create/correct a record (backfill). Upserts on (firm,user,date). */
-export async function saveManualAttendance(input: ManualAttendanceInput, markedBy: string, firmId: string): Promise<void> {
-  const row = {
-    firm_id: firmId, user_id: input.user_id, user_name: input.user_name, work_date: input.work_date,
-    status: input.status, check_in_at: input.check_in_at || null, check_out_at: input.check_out_at || null,
-    check_in_label: input.check_in_label || null, check_out_label: input.check_out_label || null,
-    notes: input.notes || null, marked_by: markedBy, updated_at: new Date().toISOString(),
-  };
-  const { error } = await supabase.from('attendance_records').upsert(row as any, { onConflict: 'firm_id,user_id,work_date' });
-  if (error) throw error;
+export async function saveManualAttendance(input: ManualAttendanceInput, markedBy: string, _firmId: string): Promise<void> {
+  await vastosApiFetch('/api/attendance/manual', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input, markedBy }),
+  });
 }
 
-export async function deleteAttendance(id: string, firmId: string): Promise<void> {
-  const { error } = await supabase.from('attendance_records').delete().eq('id', id).eq('firm_id', firmId);
-  if (error) throw error;
+export async function deleteAttendance(id: string, _firmId: string): Promise<void> {
+  await deleteRow('attendance_records', id);
 }
