@@ -2,11 +2,9 @@
 // match an existing contact by email/phone (returning customer), prevent duplicate
 // CRM leads, and keep the marketing attribution row in sync. Used by the "Map to
 // CRM" action on unmapped ad leads.
-import { supabase } from '../lib/supabase';
+import { updateRow, updateWhereRows } from '../lib/vastosApi';
 import { store } from '../data/store';
 import type { AdLead } from './types';
-
-const sb = supabase as any;
 
 export interface MapResult {
   status: 'mapped' | 'duplicate';
@@ -55,11 +53,18 @@ export async function mapAdLeadToCrm(adLead: AdLead, firmId: string): Promise<Ma
     status = 'mapped';
   }
 
-  // persist the ad-lead mapping + attribution link
-  await sb.from('crm_ad_leads').update({ crm_lead_id: crmLeadId, contact_id: contactId, status }).eq('id', adLead.id);
-  await sb.from('crm_marketing_attribution')
-    .update({ lead_id: crmLeadId, stage: status === 'duplicate' ? 'qualified' : 'lead', updated_at: new Date().toISOString() })
-    .eq('ad_lead_id', adLead.id);
+  // persist the ad-lead mapping + attribution link — through vastos-api since
+  // Phase 5 item 2.13 (Marketing reads both tables from the VPS, so writing
+  // them to Supabase left the mapping invisible). Best-effort and independent,
+  // as before: the lead already exists via the store, so a failure is logged
+  // rather than thrown.
+  await updateRow('crm_ad_leads', adLead.id, { crm_lead_id: crmLeadId, contact_id: contactId, status })
+    .catch((e) => console.error('[marketing] saving the ad-lead mapping failed', e));
+  await updateWhereRows(
+    'crm_marketing_attribution',
+    { ad_lead_id: adLead.id },
+    { lead_id: crmLeadId, stage: status === 'duplicate' ? 'qualified' : 'lead', updated_at: new Date().toISOString() },
+  ).catch((e) => console.error('[marketing] updating the attribution row failed', e));
 
   return { status, crmLeadId, returning };
 }

@@ -47,10 +47,21 @@ export const TABLES = {
 export type StoreKey = keyof typeof TABLES;
 
 // Tables whose writes go through vastos-api's /api/data/:table instead of
-// supabase-js. Grow this set as each module's backend endpoints ship (Phase 5
-// item 2.6+ — leads first). vastos-api's db/table-registry.ts is the actual
-// allowlist enforced server-side; this just decides which client to call.
-const MIGRATED_TABLES: ReadonlySet<StoreKey> = new Set(['leads', 'leadInteractions', 'leadQuotations']);
+// supabase-js. vastos-api's db/table-registry.ts is the actual allowlist
+// enforced server-side; this just decides which client to call.
+//
+// Every store table is here except roles/rolePermissions: their RLS grants
+// `authenticated` SELECT only, so those writes are refused on either database
+// (a pre-existing gap — saving role edits needs admin-gated RPCs, not a
+// routing change) and nothing about them can diverge by staying put. Until
+// Phase 5 item 2.13 only the three leads tables were listed, so every other
+// write here still landed in Supabase while /api/firm/bootstrap read the VPS.
+const MIGRATED_TABLES: ReadonlySet<StoreKey> = new Set([
+  'profiles', 'projects', 'assignments', 'milestones', 'siteUpdates', 'paymentPlans', 'paymentSplits',
+  'paymentsReceived', 'costEntries', 'comments', 'notifications', 'activityLog', 'leads',
+  'leadInteractions', 'leadQuotations', 'projectDocuments', 'projectVendors', 'contacts',
+  'pipelineStages', 'featureFlags', 'commChannels', 'dashboardLayouts',
+]);
 
 const NUMERIC_FIELDS = new Set([
   'project_value', 'total_amount', 'split_count', 'amount', 'gst_rate', 'gst_amount', 'total_with_gst',

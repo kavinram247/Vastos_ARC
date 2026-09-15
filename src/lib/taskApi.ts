@@ -148,7 +148,10 @@ function normalizeTask(row: any): Task {
   return {
     ...row,
     tags: row.tags ?? [],
-    attachments: row.attachments ?? [],
+    // Array.isArray, not ??: until vastos-api's jsonb fix (Phase 5 item 2.13)
+    // new tasks were stored with attachments = {} (an object), which the
+    // detail panel then .map()s and spreads.
+    attachments: Array.isArray(row.attachments) ? row.attachments : [],
     progress: row.progress ?? 0,
     repeat: row.repeat ?? 'none',
     is_followup: !!row.is_followup,
