@@ -7,7 +7,8 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select } from '../components/ui/Input';
-import { FUNCTIONS_BASE_URL, supabase } from '../lib/supabase';
+import { FUNCTIONS_BASE_URL } from '../lib/supabase';
+import { createLeadIntakeToken, listLeadIntakeTokens, revokeLeadIntakeToken, type WebhookToken } from '../lib/vastosApi';
 import { stageColor } from './logic';
 import { TELEPHONY_PROVIDERS, type TelephonyConfig } from './telephony';
 import type { Page } from '../types';
@@ -189,8 +190,6 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
 // The token is shown exactly once, at the moment it is minted: the database
 // stores only its SHA-256, so there is no read path that can hand it back —
 // deliberately, and the same posture C3 established for invite tokens.
-interface WebhookToken { id: string; label: string | null; created_at: string; last_used_at: string | null; revoked_at: string | null; }
-
 function WebhookTokens() {
   const [tokens, setTokens] = useState<WebhookToken[]>([]);
   const [fresh, setFresh] = useState<string | null>(null);
@@ -198,9 +197,8 @@ function WebhookTokens() {
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
-    const { data, error } = await (supabase as any).rpc('list_lead_intake_tokens');
-    if (error) { setError(error.message); return; }
-    setTokens(data || []);
+    try { setTokens(await listLeadIntakeTokens()); }
+    catch (e: any) { setError(e.message); }
   };
   useEffect(() => { void load(); }, []);
 
@@ -208,15 +206,15 @@ function WebhookTokens() {
     setBusy(true); setError(null);
     const label = prompt('Label this token (e.g. "vastoarch.com contact form")') ?? '';
     if (!label.trim()) { setBusy(false); return; }
-    const { data, error } = await (supabase as any).rpc('create_lead_intake_token', { p_label: label.trim() });
-    if (error) setError(error.message); else { setFresh(data.token); await load(); }
+    try { const data = await createLeadIntakeToken(label.trim()); setFresh(data.token); await load(); }
+    catch (e: any) { setError(e.message); }
     setBusy(false);
   };
 
   const revoke = async (id: string) => {
     if (!confirm('Revoke this token? Any website still sending it will stop creating leads.')) return;
-    const { error } = await (supabase as any).rpc('revoke_lead_intake_token', { p_id: id });
-    if (error) setError(error.message); else await load();
+    try { await revokeLeadIntakeToken(id); await load(); }
+    catch (e: any) { setError(e.message); }
   };
 
   const live = tokens.filter(t => !t.revoked_at);

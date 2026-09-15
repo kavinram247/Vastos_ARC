@@ -204,3 +204,30 @@ export async function claimLead(leadId: string, userId: string): Promise<any | n
   const body = await res.json();
   return body.ok ? body.lead : null;
 }
+
+// ── /api/leads/intake-tokens — website enquiry-capture webhook tokens ──────
+export interface WebhookToken {
+  id: string;
+  label: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export async function listLeadIntakeTokens(): Promise<WebhookToken[]> {
+  const res = await authedFetch('/api/leads/intake-tokens');
+  return res.json();
+}
+
+export async function createLeadIntakeToken(label: string): Promise<{ id: string; token: string; firm_id: string }> {
+  const res = await authedFetch('/api/leads/intake-tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  return res.json();
+}
+
+export async function revokeLeadIntakeToken(id: string): Promise<void> {
+  await authedFetch(`/api/leads/intake-tokens/${id}`, { method: 'DELETE' });
+}
