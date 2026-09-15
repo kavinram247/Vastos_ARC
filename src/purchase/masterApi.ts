@@ -1,14 +1,13 @@
 // ─────────────────────────────────────────────────────────────
-// Purchase masters — vendors (supplier) + materials (catalog). These REUSE the
-// existing `vendors` and `catalog_products` tables so Purchase Management, the
-// BOQ engine and Vendor Intelligence all read one source of truth.
-// The generated database.types.ts predates the migration-28 columns, so this
-// module talks to an untyped client handle (same pattern used elsewhere).
+// Purchase masters — vendors (supplier) + materials (catalog). Cut over to
+// vastos-api (Phase 5, item 2.12): vastos-api/src/purchase/purchase-masters
+// .service.ts is the server-side source of truth now. Every exported
+// function keeps its exact original signature (including now-unused
+// firmId params, resolved server-side from the verified session) — callers
+// need zero changes.
 // ─────────────────────────────────────────────────────────────
-import { supabase } from '../lib/supabase';
+import { vastosApiFetch } from '../lib/vastosApi';
 import type { PurchaseVendor, PurchaseMaterial } from './types';
-
-const sb = supabase as any;
 
 // ── Vendors ──────────────────────────────────────────────────
 export interface VendorInput {
@@ -26,93 +25,36 @@ export interface VendorInput {
   notes?: string | null;
 }
 
-export async function listVendors(firmId: string): Promise<PurchaseVendor[]> {
-  const { data, error } = await sb.from('vendors')
-    .select('id,company_name,vendor_code,contact_person,phone,email,gstin,category,credit_days,payment_terms,status,notes,overall_score')
-    .eq('firm_id', firmId).order('company_name');
-  if (error) throw error;
-  return (data || []).map((v: any) => ({
-    id: v.id, company_name: v.company_name, vendor_code: v.vendor_code ?? null,
-    contact_person: v.contact_person ?? null, phone: v.phone ?? null, email: v.email ?? null,
-    gstin: v.gstin ?? null, category: v.category ?? null,
-    credit_days: v.credit_days ?? null, payment_terms: v.payment_terms ?? null,
-    status: v.status, notes: v.notes ?? null,
-    overall_score: v.overall_score == null ? null : Number(v.overall_score),
-  }));
+export async function listVendors(_firmId: string): Promise<PurchaseVendor[]> {
+  return vastosApiFetch<PurchaseVendor[]>('/api/purchase/vendors');
 }
 
-export async function saveVendor(input: VendorInput, firmId: string, userId: string): Promise<string> {
-  const fields = {
-    company_name: input.company_name.trim(),
-    vendor_code: input.vendor_code?.trim() || null,
-    contact_person: input.contact_person?.trim() || null,
-    phone: input.phone?.trim() || null,
-    email: input.email?.trim() || null,
-    gstin: input.gstin?.trim() || null,
-    category: input.category?.trim() || null,
-    credit_days: input.credit_days ?? null,
-    payment_terms: input.payment_terms?.trim() || null,
-    status: input.status,
-    notes: input.notes?.trim() || null,
-  };
-  if (input.id) {
-    const { error } = await sb.from('vendors').update(fields).eq('id', input.id);
-    if (error) throw error;
-    return input.id;
-  }
-  const { data, error } = await sb.from('vendors')
-    .insert({ firm_id: firmId, created_by: userId, ...fields }).select('id').single();
-  if (error) throw error;
-  return data.id;
+// created_by (a profiles.id uuid) is resolved server-side from the session —
+// not the same id space as firmId/userId here — so vendors are a bespoke
+// endpoint, not the generic /api/data/:table layer. See
+// purchase-masters.service.ts's big comment.
+export async function saveVendor(input: VendorInput, _firmId: string, _userId: string): Promise<string> {
+  const { id } = await vastosApiFetch<{ id: string }>('/api/purchase/vendors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return id;
 }
 
 export async function deleteVendor(id: string): Promise<void> {
-  const { error } = await sb.from('vendors').delete().eq('id', id);
-  if (error) throw error;
+  await vastosApiFetch(`/api/purchase/vendors/${id}`, { method: 'DELETE' });
 }
 
 // ── Materials (catalog_products) ─────────────────────────────
 export interface CatalogCategory { id: string; name: string; path: string }
 
 export async function listCatalogCategories(): Promise<CatalogCategory[]> {
-  const { data, error } = await sb.from('catalog_categories').select('id,name,path').order('path');
-  if (error) throw error;
-  return (data || []).map((c: any) => ({ id: c.id, name: c.name, path: c.path }));
+  return vastosApiFetch<CatalogCategory[]>('/api/purchase/catalog-categories');
 }
 
-export async function listMaterials(firmId: string): Promise<PurchaseMaterial[]> {
-  const [{ data: products, error: ep }, { data: cats, error: ec }, { data: skus, error: es }, { data: rates, error: er }] =
-    await Promise.all([
-      sb.from('catalog_products_effective').select('id,name,category_id,base_uom,hsn_code,gst_rate,is_active').order('name'),
-      sb.from('catalog_categories').select('id,name'),
-      sb.from('product_skus').select('id,product_id'),
-      sb.from('rate_cards').select('sku_id,rate,region_id,valid_from').eq('firm_id', firmId).not('sku_id', 'is', null),
-    ]);
-  for (const e of [ep, ec, es, er]) if (e) throw e;
-
-  const catName = new Map<string, string>((cats || []).map((c: any) => [c.id, c.name]));
-  const productOfSku = new Map<string, string>((skus || []).map((s: any) => [s.id, s.product_id]));
-
-  // latest national rate per product → "last price"
-  const lastPrice = new Map<string, { rate: number; when: string }>();
-  for (const r of (rates || []) as any[]) {
-    if (r.region_id) continue; // national base only
-    const pid = productOfSku.get(r.sku_id);
-    if (!pid) continue;
-    const when = r.valid_from || '';
-    const cur = lastPrice.get(pid);
-    if (!cur || when >= cur.when) lastPrice.set(pid, { rate: Number(r.rate), when });
-  }
-
-  return (products || []).map((p: any) => ({
-    id: p.id, name: p.name,
-    category_id: p.category_id ?? null,
-    category: p.category_id ? (catName.get(p.category_id) ?? null) : null,
-    base_uom: p.base_uom, hsn_code: p.hsn_code ?? null,
-    gst_rate: Number(p.gst_rate ?? 18),
-    last_price: lastPrice.get(p.id)?.rate ?? null,
-    is_active: p.is_active !== false,
-  }));
+export async function listMaterials(_firmId: string): Promise<PurchaseMaterial[]> {
+  return vastosApiFetch<PurchaseMaterial[]>('/api/purchase/materials');
 }
 
 export interface MaterialInput {
@@ -125,37 +67,16 @@ export interface MaterialInput {
   description?: string | null;
 }
 
-export async function saveMaterial(input: MaterialInput, firmId: string): Promise<string> {
-  const fields: any = {
-    name: input.name.trim(),
-    category_id: input.category_id,
-    base_uom: input.base_uom,
-    hsn_code: input.hsn_code?.trim() || null,
-    gst_rate: input.gst_rate,
-  };
-  if (input.description?.trim()) fields.attributes = { description: input.description.trim() };
-  if (input.id) {
-    // Copy-on-write (H2b). The shared catalogue is read-only to every tenant;
-    // this RPC updates in place when the material belongs to this firm and
-    // records a per-firm override when it is a global row. A direct UPDATE
-    // here used to reprice every other firm's estimates.
-    const { error } = await (sb as any).rpc('catalog_product_override_set', {
-      p_product_id: input.id, p_patch: fields,
-    });
-    if (error) throw error;
-    return input.id;
-  }
-  const { data, error } = await sb.from('catalog_products')
-    .insert({ firm_id: firmId, is_active: true, ...fields }).select('id').single();
-  if (error) throw error;
-  return data.id;
+export async function saveMaterial(input: MaterialInput, _firmId: string): Promise<string> {
+  const { id } = await vastosApiFetch<{ id: string }>('/api/purchase/materials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return id;
 }
 
 /** Soft-delete a material (kept referenced by history; hidden from pickers). */
 export async function deactivateMaterial(id: string): Promise<void> {
-  // H2b: hiding a shared material hides it for THIS firm only, as an override.
-  const { error } = await (sb as any).rpc('catalog_product_override_set', {
-    p_product_id: id, p_patch: { is_active: false },
-  });
-  if (error) throw error;
+  await vastosApiFetch(`/api/purchase/materials/${id}/deactivate`, { method: 'POST' });
 }
