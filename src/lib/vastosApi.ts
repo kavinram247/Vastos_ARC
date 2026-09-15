@@ -11,6 +11,15 @@ export function isVastosApiConfigured(): boolean {
   return !!VASTOS_API_URL;
 }
 
+/** Base URL for building a link to a genuinely public vastos-api route
+ * (webhook endpoints, share links) — nothing here carries a session. */
+export function getVastosApiUrl(): string {
+  if (!VASTOS_API_URL) {
+    throw new Error('The Vastos API is not configured (VITE_VASTOS_API_URL is unset)');
+  }
+  return VASTOS_API_URL;
+}
+
 interface PresignUploadResult {
   uploadUrl: string;
   objectKey: string;
@@ -44,6 +53,21 @@ async function authedFetch(path: string, init: RequestInit = {}): Promise<Respon
  * to reach vastos-api endpoints outside this file's own bespoke wrappers. */
 export async function vastosApiFetch<T = any>(path: string, init?: RequestInit): Promise<T> {
   const res = await authedFetch(path, init);
+  return res.json();
+}
+
+/** For routes with genuinely no session — a share-link viewer, a website's
+ * own contact form. No Authorization header; the caller carries its own
+ * token (in the path/body/header) as its whole trust boundary. */
+export async function publicVastosApiFetch<T = any>(path: string, init?: RequestInit): Promise<T> {
+  if (!VASTOS_API_URL) {
+    throw new Error('The Vastos API is not configured (VITE_VASTOS_API_URL is unset)');
+  }
+  const res = await fetch(`${VASTOS_API_URL}${path}`, init);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || body?.message || `Request failed (${res.status})`);
+  }
   return res.json();
 }
 
@@ -203,6 +227,17 @@ export async function claimLead(leadId: string, userId: string): Promise<any | n
   });
   const body = await res.json();
   return body.ok ? body.lead : null;
+}
+
+// ── /api/boq/quotations/:id/{share-token,schedule} — quote-share, firm side ─
+export async function getBoqShareToken(quotationId: string): Promise<string | null> {
+  const res = await authedFetch(`/api/boq/quotations/${quotationId}/share-token`);
+  return res.json();
+}
+
+export async function getBoqSchedule(quotationId: string): Promise<any | null> {
+  const res = await authedFetch(`/api/boq/quotations/${quotationId}/schedule`);
+  return res.json();
 }
 
 // ── /api/leads/intake-tokens — website enquiry-capture webhook tokens ──────

@@ -7,8 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select } from '../components/ui/Input';
-import { FUNCTIONS_BASE_URL } from '../lib/supabase';
-import { createLeadIntakeToken, listLeadIntakeTokens, revokeLeadIntakeToken, type WebhookToken } from '../lib/vastosApi';
+import { createLeadIntakeToken, getVastosApiUrl, listLeadIntakeTokens, revokeLeadIntakeToken, type WebhookToken } from '../lib/vastosApi';
 import { stageColor } from './logic';
 import { TELEPHONY_PROVIDERS, type TelephonyConfig } from './telephony';
 import type { Page } from '../types';
@@ -44,7 +43,10 @@ export function LeadsAdminPage({ onNavigate }: { onNavigate?: (page: Page, proje
   const channels = store.commChannels.filter(c => c.firm_id === firmId);
   // Audit H5 (residual): was the production project ref, hardcoded — a staging
   // build showed admins a webhook that posted real leads into production.
-  const webhookUrl = `${FUNCTIONS_BASE_URL}/lead-intake`;
+  // Points at vastos-api (Phase 5, item 3.2) — the receiver moved off the
+  // Supabase Edge Function, which no longer sees writes for crm_leads/
+  // crm_webhook_tokens now that both live on the VPS.
+  const webhookUrl = `${getVastosApiUrl()}/api/leads/intake`;
 
   const moveStage = (id: string, dir: -1 | 1) => {
     const i = stages.findIndex(s => s.id === id);

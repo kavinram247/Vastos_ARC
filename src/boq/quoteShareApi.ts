@@ -2,12 +2,8 @@
 // Public client-quote flow: share token → view → accept/e-sign →
 // auto-generate the payment schedule (quote-to-cash spine, Section 10 / deal-maker #2).
 // ─────────────────────────────────────────────────────────────
-import { supabase } from '../lib/supabase';
+import { getBoqSchedule, getBoqShareToken, publicVastosApiFetch } from '../lib/vastosApi';
 import type { BoqDetail } from './engine/documents';
-
-// database.types.ts is generated and does not yet carry the Phase 2 RPCs.
-// Same escape hatch the inventory module uses for its inv_* calls.
-const sb = supabase as any;
 
 // Standard Indian interior 4-stage plan (firm-configurable later).
 // DISPLAY ONLY. The authoritative copy lives in accept_quote() —
@@ -36,37 +32,25 @@ export interface ScheduleWithMilestones {
 }
 
 export async function getShareToken(quotationId: string): Promise<string> {
-  const { data, error } = await supabase.from('quotations').select('share_token').eq('id', quotationId).single();
-  if (error) throw error;
-  return (data as any).share_token as string;
+  const token = await getBoqShareToken(quotationId);
+  if (!token) throw new Error('Quotation not found');
+  return token;
 }
 
 export async function fetchScheduleForQuotation(quotationId: string): Promise<ScheduleWithMilestones | null> {
-  const { data: sched, error } = await supabase.from('payment_schedules')
-    .select('id,total_amount,split_count,signed_name,signed_at').eq('quotation_id', quotationId)
-    .order('created_at', { ascending: false }).limit(1);
-  if (error) throw error;
-  const s = (sched as any[])[0];
-  if (!s) return null;
-  const { data: ms, error: em } = await supabase.from('payment_milestones')
-    .select('split_number,label,percent,amount,gst_amount,total_with_gst').eq('schedule_id', s.id).order('split_number');
-  if (em) throw em;
-  return {
-    total_amount: Number(s.total_amount), split_count: s.split_count, signed_name: s.signed_name, signed_at: s.signed_at,
-    milestones: (ms || []).map((m: any) => ({ split_number: m.split_number, label: m.label, percent: Number(m.percent), amount: Number(m.amount), gst_amount: Number(m.gst_amount), total_with_gst: Number(m.total_with_gst) })),
-  };
+  const s = await getBoqSchedule(quotationId);
+  return s ? normaliseSchedule(s) : null;
 }
 
 // ── Public (unauthenticated) flow — audit C5 ──
-// Both calls below go through SECURITY DEFINER RPCs that resolve the quotation
-// BY SHARE TOKEN. They are the only two functions `anon` may execute; the
-// tables themselves are unreachable without a session. See
-// supabase/migrations/20260728030000_security_phase2_c5_quote_accept_rpc.sql.
+// Both calls below hit public, unauthenticated vastos-api routes (Phase 5,
+// item 3) that proxy the same quote_public_view/accept_quote SECURITY
+// DEFINER RPCs, resolving the quotation entirely by its share token — no
+// session, no Supabase involved. See boq-quote-share.service.ts.
 
 /** Read a quote by its share token. Also stamps viewed_at server-side. */
 export async function fetchPublicQuote(token: string): Promise<PublicQuote> {
-  const { data, error } = await sb.rpc('quote_public_view', { p_token: token });
-  if (error) throw error;
+  const data = await publicVastosApiFetch<any>(`/api/boq/quotes/${token}`);
   if (!data) throw new Error('Quote not found');
   const p = data as any;
 
@@ -138,11 +122,10 @@ export interface AcceptInput {
 }
 
 export async function acceptQuote(input: AcceptInput): Promise<ScheduleWithMilestones> {
-  const { data, error } = await sb.rpc('accept_quote', {
-    p_token: input.token,
-    p_name: input.name,
-    p_selected: input.selectedOptionalIds,
+  const data = await publicVastosApiFetch<any>(`/api/boq/quotes/${input.token}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: input.name, selectedOptionalIds: input.selectedOptionalIds }),
   });
-  if (error) throw error;
-  return normaliseSchedule(data as any);
+  return normaliseSchedule(data);
 }
