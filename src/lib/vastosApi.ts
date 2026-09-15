@@ -266,3 +266,25 @@ export async function createLeadIntakeToken(label: string): Promise<{ id: string
 export async function revokeLeadIntakeToken(id: string): Promise<void> {
   await authedFetch(`/api/leads/intake-tokens/${id}`, { method: 'DELETE' });
 }
+
+// ── /api/team/invites — team invites, authenticated half (Phase 5, item 3.5) ─
+export interface CreatedInvite {
+  id: string;
+  email: string;
+  token: string;
+  expires_at: string;
+}
+
+export async function createTeamInvite(
+  email: string,
+  fullName: string,
+  roleId: string | null,
+  phone: string | null,
+): Promise<CreatedInvite> {
+  const res = await authedFetch('/api/team/invites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, fullName, roleId, phone }),
+  });
+  return res.json();
+}

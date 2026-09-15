@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { createTeamInvite } from '../lib/vastosApi';
 import { useAuth, usePlan } from '../context/AuthContext';
 import { useStore } from '../hooks/useStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -375,13 +375,12 @@ function InviteUserModal({ open, onClose, firmId }: { open: boolean; onClose: ()
       // the caller's own session, not from `firmId` here, so an admin cannot
       // invite into another tenant. The token comes back exactly once, to
       // build the link below; it is never readable again.
-      const { data: invite, error: ie } = await (supabase as any).rpc('create_invite', {
-        p_email: email,
-        p_full_name: form.full_name.trim(),
-        p_role_id: form.role_id || null,
-        p_phone: form.phone.trim() || null,
-      });
-      if (ie) throw ie;
+      const invite = await createTeamInvite(
+        email,
+        form.full_name.trim(),
+        form.role_id || null,
+        form.phone.trim() || null,
+      );
 
       // Local store, for immediate list display.
       store.addProfile({

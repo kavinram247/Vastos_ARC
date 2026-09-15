@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { getVastosApiUrl } from '../lib/vastosApi';
 import { Eye, EyeOff, Loader2, CheckCircle, XCircle, ArrowRight } from 'lucide-react';
 
 // Only what validate_invite() returns. firm_id, role_id and the token itself
@@ -39,15 +39,18 @@ export function AcceptInvitePage({ token }: Props) {
   // Audit C3: user_invites is deny-all for every client role — `token` is a
   // bearer credential that exchanges for a confirmed account, and this table
   // used to be readable by anon. validate_invite() returns only the email and
-  // a status; expiry and acceptance are decided server-side.
+  // a status; expiry and acceptance are decided server-side. Now served by
+  // vastos-api (Phase 5, item 3.5) instead of a direct Supabase RPC.
   useEffect(() => {
-    (supabase as any).rpc('validate_invite', { p_token: token })
-      .then(({ data, error: e }: any) => {
-        if (e || !data) { setStatus('invalid'); return; }
+    fetch(`${getVastosApiUrl()}/api/invites/${token}`)
+      .then((res) => res.json())
+      .then((data: any) => {
+        if (!data) { setStatus('invalid'); return; }
         if (data.status !== 'valid') { setStatus(data.status); return; }
         setInvite({ email: data.email, full_name: data.full_name } as InviteRow);
         setStatus('valid');
-      });
+      })
+      .catch(() => setStatus('invalid'));
   }, [token]);
 
   const handleAccept = async (e: React.FormEvent) => {
@@ -61,15 +64,15 @@ export function AcceptInvitePage({ token }: Props) {
     setError('');
     setSaving(true);
 
-    // Use edge function with admin API — creates confirmed user without sending any email.
-    // No hardcoded fallback (audit H5): the previous `?? 'https://weckowkv….supabase.co'`
-    // meant a misconfigured build redeemed invites against PRODUCTION regardless of which
-    // project the rest of the app was pointed at. src/lib/supabase.ts already throws when
-    // this is unset, so reaching here without it is not a reachable state.
-    const res = await fetch(`${(import.meta as any).env?.VITE_SUPABASE_URL}/functions/v1/accept-invite`, {
+    // Calls vastos-api's public accept endpoint (Phase 5, item 3.5), which
+    // ports accept-invite's exact claim -> createUser -> finalize sequence —
+    // creating the actual auth.users row is the one step that still touches
+    // Supabase (via the service-role Admin API), everything else runs
+    // against the VPS.
+    const res = await fetch(`${getVastosApiUrl()}/api/invites/${token}/accept`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify({ password }),
     } as RequestInit);
     const result = await res.json();
 
