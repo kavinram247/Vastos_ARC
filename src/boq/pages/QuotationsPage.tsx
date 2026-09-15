@@ -149,7 +149,9 @@ export function QuotationsPage() {
           )}
 
           <div id="quote-doc">
-            {loadingDetail || !detail ? (
+            {boqs.length === 0 ? (
+              <Card><div className="flex items-center justify-center py-16 text-slate-400 text-sm">No saved BOQs yet — create one in the BOQ Estimator.</div></Card>
+            ) : loadingDetail || !detail ? (
               <Card><div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…</div></Card>
             ) : (
               <Card className="space-y-5">
