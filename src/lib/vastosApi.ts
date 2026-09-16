@@ -1,7 +1,9 @@
-// Client for vastos-api (NestJS on the VPS) — document upload/download via R2
-// presigned URLs, plus the /api/firm/bootstrap login-hydration endpoint
-// (Phase 5, item 2). Separate from FUNCTIONS_BASE_URL (Supabase edge
-// functions): this is a different service entirely.
+// Client for vastos-api (NestJS on the VPS) — document upload/download
+// proxied through the app to self-hosted MinIO (Phase 5, item 3.8; MinIO has
+// no public endpoint, so unlike the R2 setup this replaced, there's no
+// presigned URL for the browser to use directly), plus the
+// /api/firm/bootstrap login-hydration endpoint (Phase 5, item 2). Separate
+// from FUNCTIONS_BASE_URL (Supabase edge functions): a different service.
 import { supabase } from './supabase';
 import type { UserRole } from '../types';
 
@@ -20,15 +22,9 @@ export function getVastosApiUrl(): string {
   return VASTOS_API_URL;
 }
 
-interface PresignUploadResult {
-  uploadUrl: string;
+interface UploadResult {
   objectKey: string;
-  expiresIn: number;
-}
-
-interface PresignDownloadResult {
-  downloadUrl: string;
-  expiresIn: number;
+  sizeBytes: number;
 }
 
 async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -71,38 +67,29 @@ export async function publicVastosApiFetch<T = any>(path: string, init?: Request
   return res.json();
 }
 
-export async function presignUpload(
-  projectId: string,
-  filename: string,
-  contentType: string,
-  sizeBytes: number,
-): Promise<PresignUploadResult> {
-  const res = await authedFetch(`/documents/${projectId}/presign-upload`, {
+// Sends the file straight to vastos-api, which relays it to MinIO over the
+// private network — MinIO has no public endpoint to upload to directly.
+// Don't set a Content-Type header here: the browser needs to fill in
+// multipart/form-data's own boundary, which a manual header would clobber.
+export async function uploadDocument(projectId: string, file: File): Promise<UploadResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authedFetch(`/documents/${projectId}/upload`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, contentType, sizeBytes }),
+    body: form,
   });
   return res.json();
 }
 
-// Uploads directly to R2, bypassing our server for the actual bytes — the
-// whole point of a presigned URL. contentType MUST match what was passed to
-// presignUpload(): R2 verifies the presigned signature against it.
-export async function uploadToR2(uploadUrl: string, file: File, contentType: string): Promise<void> {
-  const res = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`Upload to storage failed (${res.status})`);
-}
-
-export async function presignDownload(
+// Fetches the bytes through vastos-api (same reason as upload) and hands
+// back a Blob — same-origin object storage means there's no URL a plain
+// <a href> or window.open could hit directly with the auth header attached.
+export async function downloadDocument(
   documentId: string,
   disposition: 'inline' | 'attachment' = 'inline',
-): Promise<PresignDownloadResult> {
-  const res = await authedFetch(`/documents/${documentId}/presign-download?disposition=${disposition}`);
-  return res.json();
+): Promise<Blob> {
+  const res = await authedFetch(`/documents/${documentId}/download?disposition=${disposition}`);
+  return res.blob();
 }
 
 // ── /api/firm/bootstrap ─────────────────────────────────────────────────────

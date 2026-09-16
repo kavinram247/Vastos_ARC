@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { formatDate } from '../utils/format';
-import { isVastosApiConfigured, presignDownload, presignUpload, uploadToR2 } from '../lib/vastosApi';
+import { downloadDocument, isVastosApiConfigured, uploadDocument } from '../lib/vastosApi';
 import type { Page } from '../types';
 import type { ProjectDocument } from '../types';
 import {
@@ -28,12 +28,24 @@ function guessFileType(file: File): ProjectDocument['file_type'] {
   return 'other';
 }
 
-// R2 stores the object key in file_url for real uploads; legacy/simulated
-// rows carry '#' and never resolve. presign-download 404s either way if
-// there's nothing to fetch.
-async function openDocument(docId: string, disposition: 'inline' | 'attachment') {
-  const { downloadUrl } = await presignDownload(docId, disposition);
-  window.open(downloadUrl, '_blank');
+// MinIO stores the object key in file_url for real uploads; legacy/simulated
+// rows carry '#' and never resolve — /documents/:id/download 404s either
+// way if there's nothing to fetch. There's no public MinIO URL to open
+// directly (unlike R2), so the bytes come back through vastos-api as a
+// Blob; 'inline' opens it in a new tab, 'attachment' triggers a real
+// filename download via a throwaway object URL.
+async function openDocument(docId: string, filename: string, disposition: 'inline' | 'attachment') {
+  const blob = await downloadDocument(docId, disposition);
+  const objectUrl = URL.createObjectURL(blob);
+  if (disposition === 'attachment') {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    a.click();
+  } else {
+    window.open(objectUrl, '_blank');
+  }
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 interface Props {
@@ -76,10 +88,10 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
 
   if (!user || !firm) return null;
 
-  const handleDownload = async (docId: string, disposition: 'inline' | 'attachment') => {
+  const handleDownload = async (docId: string, filename: string, disposition: 'inline' | 'attachment') => {
     setDownloadingId(docId);
     try {
-      await openDocument(docId, disposition);
+      await openDocument(docId, filename, disposition);
     } catch (e) {
       alert('Download failed: ' + (e as any).message);
     } finally {
@@ -200,7 +212,7 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
                       <div className="flex items-center gap-2 shrink-0">
                         {isClient ? (
                           // Client view: download/view
-                          <Button size="sm" variant="secondary" disabled={downloadingId === doc.id} onClick={() => handleDownload(doc.id, 'inline')}>
+                          <Button size="sm" variant="secondary" disabled={downloadingId === doc.id} onClick={() => handleDownload(doc.id, doc.name, 'inline')}>
                             {downloadingId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />} View
                           </Button>
                         ) : (
@@ -218,7 +230,7 @@ export function DocumentsPage({ projectId, onNavigate }: Props) {
                             >
                               {doc.visible_to_client ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                             </button>
-                            <Button size="sm" variant="secondary" disabled={downloadingId === doc.id} onClick={() => handleDownload(doc.id, 'attachment')}>
+                            <Button size="sm" variant="secondary" disabled={downloadingId === doc.id} onClick={() => handleDownload(doc.id, doc.name, 'attachment')}>
                               {downloadingId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                             </Button>
                             <button
@@ -320,9 +332,7 @@ function UploadDocumentModal({ open, onClose, firmId, projectId, userId }: {
     setUploading(true);
     setError('');
     try {
-      const contentType = file.type || 'application/octet-stream';
-      const { uploadUrl, objectKey } = await presignUpload(projectId, file.name, contentType, file.size);
-      await uploadToR2(uploadUrl, file, contentType);
+      const { objectKey } = await uploadDocument(projectId, file);
       store.addProjectDocument({
         firm_id: firmId,
         project_id: projectId,
